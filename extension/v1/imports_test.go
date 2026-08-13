@@ -26,6 +26,14 @@ var allowedExternalImports = map[string]bool{
 	"gopkg.in/yaml.v3": true,
 }
 
+// sdkSelfImportPrefix 는 SDK 트리 **내부**의 패키지 경로다(예: sdk/extension/v1/extserver 가
+// 상위 sdk/extension/v1 을 import 하는 경우).
+//
+// 모듈 경로가 github.com/... 으로 시작하기 때문에 아래의 "첫 경로 요소에 점이 있으면 외부 모듈"
+// 판정에 걸리지만, 이것은 외부 의존이 아니라 **같은 SDK 안의 참조**다. 외부 Extension 이
+// 이 SDK 하나만 받으면 되는 자족성은 그대로 유지되므로 검사 대상에서 제외한다.
+const sdkSelfImportPrefix = "github.com/heartblast/kafka-control-portal/sdk/"
+
 // sdkRoot 는 sdk/ 디렉터리 경로를 찾는다(테스트는 패키지 디렉터리에서 실행된다).
 func sdkRoot(t *testing.T) string {
 	t.Helper()
@@ -107,6 +115,9 @@ func TestSDKHasNoUnexpectedDependency(t *testing.T) {
 	walkSDKImports(t, func(file, imp string) {
 		if allowedExternalImports[imp] {
 			return
+		}
+		if strings.HasPrefix(imp, sdkSelfImportPrefix) {
+			return // SDK 트리 내부 참조(위 sdkSelfImportPrefix 주석 참조)
 		}
 		// 첫 경로 요소에 점(.)이 있으면 외부 모듈이다(표준 라이브러리에는 없다).
 		first, _, _ := strings.Cut(imp, "/")
