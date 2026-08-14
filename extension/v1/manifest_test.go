@@ -109,6 +109,11 @@ func TestManifestValidate_실패사례(t *testing.T) {
 		{"권한 네임스페이스 위반(타 Extension)", func(m *Manifest) { m.Permissions[0].Key = "ext.other.view" }, "네임스페이스"},
 		{"권한 키 중복", func(m *Manifest) { m.Permissions[1].Key = m.Permissions[0].Key }, "중복"},
 		{"backend.kind 오류", func(m *Manifest) { m.Backend.Kind = "docker" }, "backend.kind"},
+		// ⚠ 알 수 없는 되돌리기 정책은 **거부**한다. none 으로 조용히 떨어뜨리면 오타 하나로
+		// "되돌릴 수 있다고 믿었는데 안 되는" 상태가 만들어진다.
+		{"migrations.rollback 오타", func(m *Manifest) { m.Backend.Migrations.Rollback = "downs" }, "backend.migrations.rollback"},
+		{"migrations.rollback 대문자", func(m *Manifest) { m.Backend.Migrations.Rollback = "DOWN" }, "backend.migrations.rollback"},
+		{"migrations.rollback 임의값", func(m *Manifest) { m.Backend.Migrations.Rollback = "auto" }, "backend.migrations.rollback"},
 		{"route 접두 위반", func(m *Manifest) { m.Routes[0].Path = "/api/topics" }, "routes[].path"},
 		{"route 접두 유사경로", func(m *Manifest) { m.Routes[0].Path = "/api/extensions/sample-other/x" }, "routes[].path"},
 		{"route 권한 도용", func(m *Manifest) { m.Routes[0].Permission = "ext.other.view" }, "routes[].permission"},
@@ -133,6 +138,50 @@ func TestManifestValidate_실패사례(t *testing.T) {
 				t.Errorf("오류 메시지에 %q 가 없다: %v", tc.want, err)
 			}
 		})
+	}
+}
+
+// backend.migrations.rollback — 선언이 없으면 none(= v1.4.0 동작 그대로)이다.
+func TestManifest_마이그레이션_되돌리기_선언(t *testing.T) {
+	// ① 선언 없음: 기존 패키지가 그대로 통과하고 none 으로 읽힌다(하위호환).
+	m := mustParse(t, validManifestYAML)
+	if err := m.Validate(); err != nil {
+		t.Fatalf("선언 없는 Manifest 가 거부되었다: %v", err)
+	}
+	if m.MigrationRollbackMode() != MigrationRollbackNone || m.SupportsMigrationRollback() {
+		t.Fatalf("선언 없음 = none 이어야 한다: %q", m.MigrationRollbackMode())
+	}
+
+	// ② down 선언: 통과하고 지원으로 읽힌다.
+	withDown := strings.Replace(validManifestYAML,
+		"backend: { enabled: true, kind: builtin }",
+		"backend:\n  enabled: true\n  kind: builtin\n  migrations:\n    rollback: down", 1)
+	d := mustParse(t, withDown)
+	if err := d.Validate(); err != nil {
+		t.Fatalf("down 선언이 거부되었다: %v", err)
+	}
+	if d.Backend.Migrations.Rollback != MigrationRollbackDown || !d.SupportsMigrationRollback() {
+		t.Fatalf("down 선언이 반영되지 않았다: %+v", d.Backend)
+	}
+
+	// ③ none 명시: down 과 구분되어야 한다.
+	n := mustParse(t, strings.Replace(withDown, "rollback: down", "rollback: none", 1))
+	if err := n.Validate(); err != nil {
+		t.Fatalf("none 선언이 거부되었다: %v", err)
+	}
+	if n.SupportsMigrationRollback() {
+		t.Fatal("none 인데 지원으로 읽혔다")
+	}
+
+	// ④ 공백은 제거하되 값은 접지 않는다(정규화가 오타를 숨기면 안 된다).
+	sp := mustParse(t, strings.Replace(withDown, "rollback: down", `rollback: "  down  "`, 1))
+	if sp.Backend.Migrations.Rollback != MigrationRollbackDown {
+		t.Fatalf("공백 정규화 실패: %q", sp.Backend.Migrations.Rollback)
+	}
+
+	// ⑤ Sanitized 사본도 선언을 유지해야 한다(관리 화면이 이 값으로 체크박스를 켠다).
+	if !d.Sanitized().SupportsMigrationRollback() {
+		t.Fatal("Sanitized 사본에서 되돌리기 선언이 사라졌다")
 	}
 }
 

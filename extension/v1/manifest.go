@@ -31,6 +31,21 @@ const (
 	BackendKindProcess = "process"
 )
 
+// 마이그레이션 되돌리기 정책 값(backend.migrations.rollback).
+//
+// ⚠ **기본값은 none 이고, none 은 "현재 동작 그대로"** 를 뜻한다. 선언이 없는 기존 패키지는
+// 롤백 시 코드만 되돌아가고 DB 스키마는 그대로 남는다(v1.4.0 동작).
+const (
+	// MigrationRollbackNone 은 down 스크립트를 실행하지 않는다는 선언이다(기본값).
+	MigrationRollbackNone = "none"
+	// MigrationRollbackDown 은 `*.down.sql` 로 되돌릴 수 있다는 **선언**이다.
+	//
+	// ⚠ 선언했다고 자동으로 실행되지 않는다. 실행은 관리자가 롤백 요청에 명시적으로
+	// revertMigrations=true 를 담았을 때뿐이며, 업데이트 실패 시 자동 복구 경로에서는
+	// 어떤 경우에도 실행하지 않는다(자동 경로에서 데이터를 지우면 관리자가 의도를 표명할 기회가 없다).
+	MigrationRollbackDown = "down"
+)
+
 // extensionIDRe 는 Extension ID 형식이다(소문자 시작, 소문자/숫자/하이픈, 소문자·숫자로 종료, 3~32자).
 var extensionIDRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}[a-z0-9]$`)
 
@@ -49,10 +64,48 @@ type Requires struct {
 	Core string `json:"core,omitempty" yaml:"core,omitempty"`
 }
 
+// MigrationsDecl 은 패키지 DB 마이그레이션의 되돌리기 계약이다(backend.migrations).
+//
+// # 왜 선언이 필요한가
+//
+// 계약 없이 down 스크립트를 실행하면 롤백이 **데이터 손실 경로**가 된다. 무엇을 어떻게 되돌려야
+// 하는지는 패키지만 알고, Core 가 "파일이 있으니 실행한다"고 추측하면 새 버전이 이미 쓴 운영
+// 데이터를 조용히 지운다. 그래서 패키지가 "이 스크립트로 되돌려도 된다"고 **먼저 선언**해야 한다.
+type MigrationsDecl struct {
+	// Rollback 은 되돌리기 정책이다: none(기본) | down.
+	//
+	// ⚠ 알 수 없는 값은 Manifest 검증에서 **거부**한다. 조용히 none 으로 떨어뜨리면
+	// 오타(`Down`·`downs`) 하나로 "되돌릴 수 있다고 믿었는데 안 되는" 상태가 만들어진다.
+	Rollback string `json:"rollback,omitempty" yaml:"rollback,omitempty"`
+}
+
 // BackendDecl 은 Extension 백엔드 실행 방식 선언이다.
 type BackendDecl struct {
 	Enabled bool   `json:"enabled" yaml:"enabled"`
 	Kind    string `json:"kind,omitempty" yaml:"kind,omitempty"` // builtin | process(후속). 비우면 builtin 취급.
+	// Migrations 는 패키지 DB 마이그레이션 되돌리기 계약이다(비우면 rollback: none).
+	//
+	// ⚠ JSON 태그가 **omitzero** 인 이유: encoding/json 의 `omitempty` 는 구조체 필드에 적용되지
+	// 않는다. `omitempty` 로 두면 선언하지 않은 모든 확장의 응답에 `"migrations":{}` 가 새로
+	// 실려(v1.4.0 응답과 다른 모양) 응답을 그대로 비교·스냅샷하는 소비자가 차이를 본다.
+	// yaml.v3 는 `omitempty` 로 구조체 zero 값을 생략하므로 태그가 서로 다르다.
+	Migrations MigrationsDecl `json:"migrations,omitzero" yaml:"migrations,omitempty"`
+}
+
+// MigrationRollbackMode 는 선언된 되돌리기 정책을 반환한다(비어 있으면 none).
+//
+// 호출부가 빈 문자열과 "none" 을 각자 판정하면 한쪽만 고쳐도 컴파일이 통과하므로 여기로 모은다.
+func (m Manifest) MigrationRollbackMode() string {
+	if v := strings.TrimSpace(m.Backend.Migrations.Rollback); v != "" {
+		return v
+	}
+	return MigrationRollbackNone
+}
+
+// SupportsMigrationRollback 은 down 스크립트로 되돌릴 수 있다고 **선언**했는지다.
+// (실제 실행 가능 여부 — 짝 없는 down·검증 위반 — 는 Core 가 별도로 판정한다.)
+func (m Manifest) SupportsMigrationRollback() bool {
+	return m.MigrationRollbackMode() == MigrationRollbackDown
 }
 
 // FrontendDecl 은 Extension 프론트엔드 기여 방식 선언이다.
@@ -109,6 +162,9 @@ func (m *Manifest) normalize() {
 	m.Publisher = strings.TrimSpace(m.Publisher)
 	m.Requires.Core = strings.TrimSpace(m.Requires.Core)
 	m.Backend.Kind = strings.TrimSpace(m.Backend.Kind)
+	// ⚠ 공백만 제거하고 대소문자는 바꾸지 않는다 — 소문자로 접어 주면 "DOWN" 같은 오타가 조용히
+	// 통과해 계약 값이 두 가지가 된다(backend.kind 와 같은 규칙).
+	m.Backend.Migrations.Rollback = strings.TrimSpace(m.Backend.Migrations.Rollback)
 	m.Frontend.Entry = strings.TrimSpace(m.Frontend.Entry)
 
 	for i, c := range m.Capabilities {
@@ -194,6 +250,12 @@ func (m Manifest) Validate() error {
 	// 7) backend.kind
 	if k := m.Backend.Kind; k != "" && k != BackendKindBuiltin && k != BackendKindProcess {
 		errs = append(errs, fmt.Errorf("backend.kind 가 올바르지 않습니다: %q (%s | %s)", k, BackendKindBuiltin, BackendKindProcess))
+	}
+
+	// 7-1) backend.migrations.rollback — 알 수 없는 값은 거부한다(none 으로 조용히 떨어뜨리지 않는다).
+	if v := m.Backend.Migrations.Rollback; v != "" && v != MigrationRollbackNone && v != MigrationRollbackDown {
+		errs = append(errs, fmt.Errorf("backend.migrations.rollback 이 올바르지 않습니다: %q (%s | %s)",
+			v, MigrationRollbackNone, MigrationRollbackDown))
 	}
 
 	// 8) 라우트 경로 접두
