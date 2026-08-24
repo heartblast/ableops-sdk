@@ -34,6 +34,10 @@ const (
 	EnvCapabilities = "ABLEOPS_EXT_CAPABILITIES"
 	// EnvConfig 는 Extension 설정 JSON 이다(없으면 빈 문자열).
 	EnvConfig = "ABLEOPS_EXT_CONFIG"
+	// EnvProtocolVersion 은 Core 가 요구하는 프로세스 프로토콜 버전이다(미설정 = 1).
+	EnvProtocolVersion = extv1.EnvProtocolVersion
+	// EnvHostAPIVersion 은 Core 가 제공하는 Host API 버전 세그먼트다(미설정 = 버전 없는 구 경로).
+	EnvHostAPIVersion = extv1.EnvHostAPIVersion
 )
 
 // DirectRunMessage 는 사람이 이 바이너리를 직접 실행했을 때의 안내다.
@@ -66,6 +70,46 @@ type Environment struct {
 	UnknownCapabilities []string
 	// Config 는 Core 가 넘긴 설정 스냅샷이다(Host API 조회 실패 시의 폴백).
 	Config map[string]any
+
+	// MissingCapabilities 는 Manifest 가 선언했는데 **Core 가 허용하지 않은** capability 다.
+	//
+	// 정상적인 설치에서는 비어 있다(Core 는 Manifest 선언분을 그대로 넘긴다).
+	//
+	// ⚠ **기동을 막지 않는다.** Manifest 에는 "이 capability 가 없으면 아예 못 돈다"를 표현하는
+	// 수단(선택/필수 구분)이 없고, Core 가 설치 시점에 특정 capability 를 거절하는 정책을 갖게
+	// 되는 미래도 열려 있다. 그 상황에서 확장 전체를 죽이면 화면 기여까지 함께 사라진다.
+	// 대신 기동 로그에 사유를 남기고, 해당 기능 사용 시 CAPABILITY_UNAVAILABLE 을 돌려준다.
+	MissingCapabilities []extv1.Capability
+
+	// UnsupportedCapabilities 는 Core 가 허용했지만 **이 SDK 가 클라이언트 구현을 제공하지 않는**
+	// capability 다(외부 프로세스에서의 secret.ref 등).
+	//
+	// 기동은 막지 않는다. Core 쪽 계약은 정상이고 SDK 만 아직 못 따라간 상태이므로, 해당 기능을
+	// 쓰지 않는 확장은 정상 동작해야 한다. 사용을 시도하면 RequireXxx 가 CAPABILITY_UNAVAILABLE
+	// 을 돌려준다.
+	UnsupportedCapabilities []extv1.Capability
+
+	// ProtocolVersion 은 Core 가 요구한 프로세스 프로토콜 버전이다(미설정 = 최초 버전).
+	ProtocolVersion int
+
+	// HostAPIVersion 은 Core 가 제공하는 Host API 버전 세그먼트다(빈 값 = 버전 없는 구 경로).
+	HostAPIVersion string
+}
+
+// processCapabilityClients 는 이 SDK 가 **외부 프로세스** 경로에서 클라이언트 구현을 제공하는
+// capability 다(hostclient.go 의 서비스 구현과 1:1).
+//
+// ⚠ 여기 없는 capability 는 Core 가 허용해도 HostContext 에 주입되지 않는다.
+// 임의로 이름을 추가하면 존재하지 않는 Host API 경로를 부르게 되므로, 반드시 구현과 함께 넣는다.
+var processCapabilityClients = map[extv1.Capability]bool{
+	extv1.CapKafkaRead:      true,
+	extv1.CapClusterRead:    true,
+	extv1.CapWorkflowSubmit: true,
+	extv1.CapAuditWrite:     true,
+	extv1.CapConfigRead:     true,
+	extv1.CapConfigWrite:    true,
+	// secret.ref 는 외부 프로세스 Host 프로토콜에 경로가 없다(hostclient.go 참조).
+	extv1.CapSecretRef: false,
 }
 
 // String 은 마스킹된 요약을 돌려준다(토큰 유출 방지).
@@ -74,8 +118,28 @@ func (e Environment) String() string {
 	for _, c := range e.Capabilities {
 		caps = append(caps, string(c))
 	}
-	return fmt.Sprintf("Environment{id:%s version:%s hostUrl:%s callToken:%s hostToken:%s capabilities:[%s] configKeys:%d}",
-		e.ExtensionID, e.Version, e.HostURL, tokenMask, tokenMask, strings.Join(caps, " "), len(e.Config))
+	return fmt.Sprintf("Environment{id:%s version:%s protocol:%d hostApi:%s hostUrl:%s callToken:%s hostToken:%s capabilities:[%s] configKeys:%d}",
+		e.ExtensionID, e.Version, e.ProtocolVersion, e.hostAPIVersionForLog(), e.HostURL,
+		tokenMask, tokenMask, strings.Join(caps, " "), len(e.Config))
+}
+
+// hostAPIVersionForLog 는 로그 표시용 Host API 버전이다(미설정이면 표시 문구).
+func (e Environment) hostAPIVersionForLog() string {
+	if e.HostAPIVersion == "" {
+		return "(버전 없음)"
+	}
+	return e.HostAPIVersion
+}
+
+// HostAPIPath 는 Host API 상대 경로에 버전 세그먼트를 붙인다.
+//
+// Core 가 버전을 알려 주지 않으면(구버전 Core) 버전 없는 경로를 그대로 쓴다 —
+// 구 Core 는 /v1 세그먼트를 모르므로 붙이면 전부 404 가 된다.
+func (e Environment) HostAPIPath(rel string) string {
+	if e.HostAPIVersion == "" {
+		return rel
+	}
+	return "/" + e.HostAPIVersion + rel
 }
 
 // HasCapability 는 해당 capability 가 실제로 사용 가능한지 판정한다.
@@ -149,25 +213,73 @@ func loadEnvironment(lookup func(string) (string, bool), manifest extv1.Manifest
 	}
 	env.HostURL = normalized
 
-	// 4) capability — 환경변수와 Manifest 의 **교집합**만 사용한다.
-	//    Manifest 는 확장이 요구한 최소권한이고 환경변수는 Core 가 실제로 허용한 값이므로,
-	//    어느 한쪽에만 있는 capability 는 쓰지 않는 것이 양쪽 계약을 모두 지키는 유일한 해석이다.
+	// 4) 프로토콜 버전 협상 — Core 가 요구하는 버전을 이 SDK 가 구현하는지 먼저 본다.
+	rawProto, _ := lookup(EnvProtocolVersion)
+	proto, ok := extv1.ParseProtocolVersion(strings.TrimSpace(rawProto))
+	if !ok {
+		return Environment{}, &protocolMismatchError{
+			reason: fmt.Sprintf("환경변수 %s 값을 해석할 수 없습니다: %q", EnvProtocolVersion, strings.TrimSpace(rawProto)),
+		}
+	}
+	if !extv1.SupportsProtocolVersion(proto) {
+		return Environment{}, &protocolMismatchError{
+			reason: fmt.Sprintf("Core 가 요구하는 프로세스 프로토콜 버전(%d)을 이 확장 기능의 SDK 가 구현하지 않습니다(구현 범위 %d~%d) — 확장 기능을 다시 빌드하세요",
+				proto, extv1.MinProtocolVersion, extv1.MaxProtocolVersion),
+		}
+	}
+	env.ProtocolVersion = proto
+	env.HostAPIVersion = normalizeHostAPIVersion(get(EnvHostAPIVersion))
+
+	// 5) capability 협상 — 세 가지를 **구분**한다(요구 §15).
+	//
+	//     ① Manifest 에 있는데 Core 가 안 준 것      → MissingCapabilities
+	//     ② Core 는 줬는데 SDK 구현이 없는 것        → UnsupportedCapabilities
+	//     ③ 이 SDK 가 이름조차 모르는 것             → UnknownCapabilities
+	//
+	// 셋 다 기동을 막지 않고 **사유를 남긴다**. 조용히 뭉뚱그리면 증상은 전부 "왜인지 기능
+	// 하나가 안 된다"로 같아지고, 원인이 Manifest 인지 Core 인지 SDK 인지 구분할 단서가 없다.
 	raw, declaredByEnv := lookup(EnvCapabilities)
 	envCaps, unknown := parseCapabilities(raw)
 	env.UnknownCapabilities = unknown
-	switch {
-	case !declaredByEnv:
-		// 환경변수 자체가 없는 경우(구버전 Core)만 Manifest 선언을 그대로 쓴다.
-		env.Capabilities = append([]extv1.Capability(nil), manifest.Capabilities...)
-	default:
+
+	granted := make(map[extv1.Capability]bool, len(envCaps))
+	if !declaredByEnv {
+		// 환경변수 자체가 없는 경우(구버전 Core)만 Manifest 선언을 그대로 허용분으로 본다.
+		for _, c := range manifest.Capabilities {
+			granted[c] = true
+		}
+	} else {
 		for _, c := range envCaps {
-			if manifest.HasCapability(c) {
-				env.Capabilities = append(env.Capabilities, c)
+			granted[c] = true
+		}
+	}
+	for _, c := range manifest.Capabilities {
+		if !granted[c] {
+			env.MissingCapabilities = append(env.MissingCapabilities, c)
+		}
+	}
+	for _, c := range envCaps {
+		if !manifest.HasCapability(c) {
+			// Core 가 더 준 경우 — Manifest 가 최소권한 선언이므로 쓰지 않는다.
+			continue
+		}
+		if !processCapabilityClients[c] {
+			env.UnsupportedCapabilities = append(env.UnsupportedCapabilities, c)
+			continue
+		}
+		env.Capabilities = append(env.Capabilities, c)
+	}
+	if !declaredByEnv {
+		for _, c := range manifest.Capabilities {
+			if !processCapabilityClients[c] {
+				env.UnsupportedCapabilities = append(env.UnsupportedCapabilities, c)
+				continue
 			}
+			env.Capabilities = append(env.Capabilities, c)
 		}
 	}
 
-	// 5) 설정 JSON
+	// 6) 설정 JSON
 	cfg, err := parseConfigJSON(get(EnvConfig))
 	if err != nil {
 		return Environment{}, err
@@ -233,3 +345,24 @@ func parseConfigJSON(raw string) (map[string]any, error) {
 	}
 	return out, nil
 }
+
+// normalizeHostAPIVersion 은 Host API 버전 세그먼트를 정규화한다.
+//
+// 값 형식이 예상 밖이면(경로 구분자·공백 포함) **버전 없는 경로**로 떨어뜨린다 —
+// 잘못된 세그먼트로 경로를 만들면 모든 Host API 호출이 404 가 되기 때문이다.
+func normalizeHostAPIVersion(raw string) string {
+	v := strings.TrimSpace(raw)
+	v = strings.Trim(v, "/")
+	if v == "" || strings.ContainsAny(v, "/?#") {
+		return ""
+	}
+	return v
+}
+
+// protocolMismatchError 는 프로토콜 협상 실패다.
+//
+// 일반 기동 오류와 구분하는 이유: Core 는 이 실패를 보면 **재시작하지 않고** 해당 확장만
+// INCOMPATIBLE 로 격리해야 한다. 몇 번을 다시 띄워도 결과가 같기 때문이다(protocol.go 주석).
+type protocolMismatchError struct{ reason string }
+
+func (e *protocolMismatchError) Error() string { return e.reason }

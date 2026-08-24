@@ -5,8 +5,8 @@ package extensionv1
 import "testing"
 
 func TestKnownCapability(t *testing.T) {
-	if len(AllCapabilities()) != 6 {
-		t.Fatalf("capability 는 6종이어야 한다: %d종", len(AllCapabilities()))
+	if len(AllCapabilities()) != 7 {
+		t.Fatalf("capability 는 7종이어야 한다: %d종", len(AllCapabilities()))
 	}
 	for _, c := range AllCapabilities() {
 		if !KnownCapability(c) {
@@ -28,6 +28,7 @@ func TestCapability_상수값(t *testing.T) {
 		CapWorkflowSubmit: "workflow.submit",
 		CapAuditWrite:     "audit.write",
 		CapConfigRead:     "config.read",
+		CapConfigWrite:    "config.write",
 		CapSecretRef:      "secret.ref",
 	}
 	for c, s := range want {

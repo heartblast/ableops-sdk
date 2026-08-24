@@ -8,7 +8,8 @@ package extserver
 //	GET  /kafka/topics · /kafka/topics/{name} · /kafka/acls · /kafka/consumer-groups   kafka.read
 //	GET  /clusters · /clusters/{id}           cluster.read
 //	POST /audit                               audit.write
-//	GET  /config · PUT /config                config.read
+//	GET  /config                              config.read
+//	PUT  /config                              config.write
 //	POST /workflow/topic-create|topic-update|topic-delete|acl-grant|acl-revoke          workflow.submit
 //
 // 응답 본문은 SDK DTO 의 JSON 직렬화 그대로다(extensionv1.TopicInfo 등).
@@ -54,6 +55,13 @@ type HostError struct {
 	StatusCode int
 	// Message 는 Core 가 준 한국어 오류 메시지다(없으면 빈 문자열).
 	Message string
+	// Code 는 Core 가 준 안정적인 오류 코드다(SDK Error Contract).
+	//
+	// 구버전 Core 는 코드를 보내지 않으므로, 그 경우 상태코드로부터 유추한다
+	// (extensionv1.CodeForHTTPStatus). **분기는 Message 가 아니라 이 값으로 한다.**
+	Code extv1.ErrorCode
+	// RequestID 는 Core 가 이 요청에 붙인 추적 ID 다(있을 때만).
+	RequestID string
 }
 
 // Error 는 한국어 오류 문자열을 만든다(토큰은 포함하지 않는다).
@@ -62,7 +70,53 @@ func (e *HostError) Error() string {
 	if msg == "" {
 		msg = "Core 가 오류 사유를 제공하지 않았습니다"
 	}
-	return fmt.Sprintf("Core Host API 호출이 거부되었습니다(%s %s, 상태 %d): %s", e.Method, e.Path, e.StatusCode, msg)
+	suffix := ""
+	if e.RequestID != "" {
+		suffix = fmt.Sprintf(" (요청 %s)", e.RequestID)
+	}
+	return fmt.Sprintf("Core Host API 호출이 거부되었습니다(%s %s, 상태 %d, 코드 %s): %s%s",
+		e.Method, e.Path, e.StatusCode, string(e.Code), msg, suffix)
+}
+
+// Is 는 extensionv1.Error 와 **코드로** 비교되게 한다.
+//
+// 덕분에 확장은 in-process 든 외부 프로세스든 같은 방식으로 분기할 수 있다:
+//
+//	if errors.Is(err, extensionv1.NewError(extensionv1.CodeNotFound, "")) { … }
+func (e *HostError) Is(target error) bool {
+	var t *extv1.Error
+	if !errors.As(target, &t) || t == nil || e == nil {
+		return false
+	}
+	return t.Code == e.Code
+}
+
+// AsSDKError 는 SDK 표준 오류로 바꾼다(코드·메시지·추적 ID 보존).
+func (e *HostError) AsSDKError() *extv1.Error {
+	if e == nil {
+		return nil
+	}
+	return (&extv1.Error{Code: e.Code, Message: e.Message}).WithRequestID(e.RequestID)
+}
+
+// HostErrorCode 는 오류에서 SDK 오류 코드를 꺼낸다(코드가 없으면 빈 문자열).
+//
+// 네트워크 실패처럼 Core 응답이 없는 오류는 TEMPORARY_FAILURE 로 본다 — 재시도할 가치가 있다.
+func HostErrorCode(err error) extv1.ErrorCode {
+	if err == nil {
+		return ""
+	}
+	var he *HostError
+	if errors.As(err, &he) {
+		return he.Code
+	}
+	if c := extv1.CodeOf(err); c != "" {
+		return c
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return ""
+	}
+	return extv1.CodeTemporaryFailure
 }
 
 // HostStatusCode 는 오류에서 Host API 상태코드를 꺼낸다(Host 오류가 아니면 0).
@@ -81,6 +135,11 @@ type hostClient struct {
 	extensionID string
 	http        *http.Client
 	log         extv1.Logger
+	// apiPath 는 상대 경로에 Host API 버전 세그먼트를 붙이는 함수다(env.HostAPIPath).
+	//
+	// 함수로 들고 있는 이유: 구버전 Core 는 버전 없는 경로만 알고, 신버전은 /v1 을 쓴다.
+	// 호출부(각 서비스)가 그 차이를 몰라도 되게 한 곳에서 결정한다.
+	apiPath func(string) string
 }
 
 // newHostClient 는 클라이언트를 만든다(timeout 이 0 이하면 기본값).
@@ -94,6 +153,7 @@ func newHostClient(env Environment, log extv1.Logger, timeout time.Duration) *ho
 		extensionID: env.ExtensionID,
 		http:        &http.Client{Timeout: timeout},
 		log:         log,
+		apiPath:     env.HostAPIPath,
 	}
 }
 
@@ -126,7 +186,7 @@ func (c *hostClient) get(ctx context.Context, path string, query url.Values, out
 // do 는 Host API 호출을 수행한다. 재시도는 **GET 만** 한다 — POST/PUT 을 재시도하면
 // 감사 기록이나 신청서가 중복 생성될 수 있고, 그것은 조회 실패보다 훨씬 나쁜 결과다.
 func (c *hostClient) do(ctx context.Context, method, path string, query url.Values, body any, out any) error {
-	endpoint := c.baseURL + path
+	endpoint := c.baseURL + c.versionedPath(path)
 	if len(query) > 0 {
 		endpoint += "?" + query.Encode()
 	}
@@ -165,6 +225,14 @@ func (c *hostClient) do(ctx context.Context, method, path string, query url.Valu
 		}
 	}
 	return lastErr
+}
+
+// versionedPath 는 상대 경로에 Host API 버전 세그먼트를 붙인다(미설정이면 그대로).
+func (c *hostClient) versionedPath(path string) string {
+	if c.apiPath == nil {
+		return path
+	}
+	return c.apiPath(path)
 }
 
 // attempt 는 실제 HTTP 요청 1회다.
@@ -206,8 +274,10 @@ func (c *hostClient) attempt(ctx context.Context, method, endpoint, path string,
 		req.Header.Set(HeaderOnBehalfOf, id.UserID)
 		req.Header.Set(HeaderRequestToken, token)
 	}
-	if hasIdentity && id.RequestID != "" {
-		req.Header.Set(HeaderRequestID, id.RequestID)
+	// 추적 ID 는 **신원과 무관하게** 항상 전달한다(요구 §16).
+	// 신원이 있을 때만 붙이면 익명·백그라운드 호출의 상관관계가 끊긴다.
+	if rid := RequestIDFrom(ctx); rid != "" {
+		req.Header.Set(HeaderRequestID, rid)
 	}
 
 	resp, err := c.http.Do(req)
@@ -219,7 +289,15 @@ func (c *hostClient) attempt(ctx context.Context, method, endpoint, path string,
 
 	data, readErr := io.ReadAll(io.LimitReader(resp.Body, maxHostResponseBytes))
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return &HostError{Method: method, Path: path, StatusCode: resp.StatusCode, Message: errorMessage(data)}
+		msg, code, rid := errorEnvelope(data)
+		if code == "" {
+			// 구버전 Core 는 코드를 보내지 않는다 — 상태코드로 유추한다.
+			code = extv1.CodeForHTTPStatus(resp.StatusCode)
+		}
+		if rid == "" {
+			rid = strings.TrimSpace(resp.Header.Get(HeaderRequestID))
+		}
+		return &HostError{Method: method, Path: path, StatusCode: resp.StatusCode, Message: msg, Code: code, RequestID: rid}
 	}
 	if readErr != nil {
 		return fmt.Errorf("Core Host API 응답을 읽지 못했습니다(%s %s): %w", method, path, readErr)
@@ -233,25 +311,37 @@ func (c *hostClient) attempt(ctx context.Context, method, endpoint, path string,
 	return nil
 }
 
-// errorMessage 는 오류 본문 {"error":"..."} 에서 메시지를 꺼낸다.
-// JSON 이 아니면 본문 앞부분을 그대로 쓴다(원문 보존 — 원인 추적에 필요하다).
-func errorMessage(data []byte) string {
+// errorEnvelope 는 오류 본문에서 메시지·코드·추적 ID 를 꺼낸다.
+//
+// Core 오류 본문은 하위호환을 위해 `error`(구 형식)와 `code`/`message`/`requestId`(SDK Error
+// Contract)를 **함께** 싣는다. 어느 한쪽만 있는 응답도 해석한다.
+// JSON 이 아니면 본문 앞부분을 메시지로 그대로 쓴다(원문 보존 — 원인 추적에 필요하다).
+func errorEnvelope(data []byte) (message string, code extv1.ErrorCode, requestID string) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
-		return ""
+		return "", "", ""
 	}
 	var body struct {
-		Error string `json:"error"`
+		Error     string `json:"error"`
+		Message   string `json:"message"`
+		Code      string `json:"code"`
+		RequestID string `json:"requestId"`
 	}
-	if err := json.Unmarshal(trimmed, &body); err == nil && strings.TrimSpace(body.Error) != "" {
-		return strings.TrimSpace(body.Error)
+	if err := json.Unmarshal(trimmed, &body); err == nil {
+		msg := strings.TrimSpace(body.Error)
+		if msg == "" {
+			msg = strings.TrimSpace(body.Message)
+		}
+		if msg != "" || strings.TrimSpace(body.Code) != "" {
+			return msg, extv1.ErrorCode(strings.TrimSpace(body.Code)), strings.TrimSpace(body.RequestID)
+		}
 	}
 	const maxRaw = 300
 	raw := string(trimmed)
 	if len(raw) > maxRaw {
 		raw = raw[:maxRaw] + "…"
 	}
-	return raw
+	return raw, "", ""
 }
 
 // retryableHostError 는 재시도해도 되는 실패인지 판정한다.
@@ -259,6 +349,14 @@ func errorMessage(data []byte) string {
 func retryableHostError(err error) bool {
 	var he *HostError
 	if errors.As(err, &he) {
+		// 코드가 있으면 코드로 판정한다(SDK Error Contract — TEMPORARY_FAILURE 만 재시도).
+		if he.Code != "" {
+			if extv1.RetryableCode(he.Code) {
+				return true
+			}
+			// HOST_UNAVAILABLE 은 "지금은 안 되지만 곧 될 수 있다" — Core 기동 직후가 대표적이다.
+			return he.Code == extv1.CodeHostUnavailable
+		}
 		switch he.StatusCode {
 		case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 			return true
@@ -396,9 +494,24 @@ func (s auditService) Record(ctx context.Context, entry extv1.AuditEntry) {
 type configService struct {
 	c        *hostClient
 	fallback map[string]any
+	// canWrite 는 config.write capability 선언 여부다.
+	//
+	// ⚠ 인터페이스에서 Set 을 빼지 않고 런타임에서 막는 이유: ConfigService 는 v1 공개 계약이라
+	// 메서드를 제거하면 기존 확장이 컴파일되지 않는다. 대신 여기서 PERMISSION_DENIED 를 돌려주고,
+	// 새 코드는 RequireService[ConfigWriteService](host, CapConfigWrite) 로 **호출 전에** 확인한다.
+	canWrite bool
 }
 
 var _ extv1.ConfigService = (*configService)(nil)
+
+// configWriter 는 config.write 전용 서비스다(Resolver 가 돌려주는 타입).
+type configWriter struct{ svc *configService }
+
+var _ extv1.ConfigWriteService = configWriter{}
+
+func (w configWriter) Set(ctx context.Context, values map[string]any) error {
+	return w.svc.Set(ctx, values)
+}
 
 func (s *configService) Get(ctx context.Context) (map[string]any, error) {
 	var out map[string]any
@@ -416,6 +529,11 @@ func (s *configService) Get(ctx context.Context) (map[string]any, error) {
 }
 
 func (s *configService) Set(ctx context.Context, values map[string]any) error {
+	if !s.canWrite {
+		return extv1.Errorf(extv1.CodePermissionDenied,
+			"확장 기능 %s: 설정 저장에는 %s capability 가 필요합니다(Manifest capabilities 에 추가하세요)",
+			s.c.extensionID, string(extv1.CapConfigWrite))
+	}
 	if values == nil {
 		values = map[string]any{}
 	}
@@ -494,20 +612,42 @@ func newHostContext(env Environment, log extv1.Logger, timeout time.Duration) (e
 		Identity:    IdentityFrom,
 		Log:         log,
 	}
+	// ⚠ Resolver 에도 **실제로 주입한 것만** 넣는다. 빈 항목을 넣어 두면 HasService 가 true 가 되어
+	// 최소권한 검사가 통과한다(services.go 의 typed-nil 주석과 같은 이유).
+	services := extv1.ServiceMap{}
+
+	canWriteConfig := env.HasCapability(extv1.CapConfigWrite)
 	if env.HasCapability(extv1.CapKafkaRead) {
-		host.Kafka = kafkaService{c: client}
+		svc := kafkaService{c: client}
+		host.Kafka = svc
+		services[extv1.CapKafkaRead] = svc
 	}
 	if env.HasCapability(extv1.CapClusterRead) {
-		host.Clusters = clusterService{c: client}
+		svc := clusterService{c: client}
+		host.Clusters = svc
+		services[extv1.CapClusterRead] = svc
 	}
 	if env.HasCapability(extv1.CapWorkflowSubmit) {
-		host.Workflow = workflowService{c: client}
+		svc := workflowService{c: client}
+		host.Workflow = svc
+		services[extv1.CapWorkflowSubmit] = svc
 	}
 	if env.HasCapability(extv1.CapAuditWrite) {
-		host.Audit = auditService{c: client}
+		svc := auditService{c: client}
+		host.Audit = svc
+		services[extv1.CapAuditWrite] = svc
 	}
-	if env.HasCapability(extv1.CapConfigRead) {
-		host.Config = &configService{c: client, fallback: env.Config}
+	if env.HasCapability(extv1.CapConfigRead) || canWriteConfig {
+		svc := &configService{c: client, fallback: env.Config, canWrite: canWriteConfig}
+		// config.read 없이 config.write 만 선언한 확장도 성립한다(쓰기 전용). 그 경우
+		// HostContext.Config 는 채우되 Get 은 Core 가 403 으로 막는다.
+		host.Config = svc
+		if env.HasCapability(extv1.CapConfigRead) {
+			services[extv1.CapConfigRead] = extv1.ConfigReadService(svc)
+		}
+		if canWriteConfig {
+			services[extv1.CapConfigWrite] = extv1.ConfigWriteService(configWriter{svc: svc})
+		}
 	}
 	if env.HasCapability(extv1.CapSecretRef) {
 		// 외부 프로세스 Host 프로토콜 v1 에는 secret.ref 경로가 없다(§4 엔드포인트 목록).
@@ -516,5 +656,6 @@ func newHostContext(env Environment, log extv1.Logger, timeout time.Duration) (e
 		log.Warn("secret.ref 는 외부 프로세스 Extension 에서 아직 제공되지 않습니다(Host API 경로 미정의)",
 			"capability", string(extv1.CapSecretRef))
 	}
+	host.Services = services
 	return host, client
 }

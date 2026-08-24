@@ -33,14 +33,35 @@ type ConfigDecl struct {
 	Schema []ConfigField `json:"schema,omitempty" yaml:"schema,omitempty"`
 }
 
-// ConfigService 는 Extension 설정 접근 인터페이스다(capability: config.read).
+// ConfigReadService 는 Extension 설정 **조회** 계약이다(capability: config.read).
+type ConfigReadService interface {
+	Get(ctx context.Context) (map[string]any, error)
+}
+
+// ConfigWriteService 는 Extension 설정 **저장** 계약이다(capability: config.write).
+//
+// 조회와 분리한 이유는 capability 이름이 실제 권한과 일치해야 하기 때문이다(capability.go 주석).
+// Resolver 로 얻는다:
+//
+//	w, err := extensionv1.RequireService[extensionv1.ConfigWriteService](host, extensionv1.CapConfigWrite)
+type ConfigWriteService interface {
+	Set(ctx context.Context, values map[string]any) error
+}
+
+// ConfigService 는 Extension 설정 접근 인터페이스다(HostContext.Config).
 //
 // **자기 Extension 설정만** 접근할 수 있다. 대상 Extension ID 를 인자로 받지 않는 이유가 그것이다 —
 // Core 가 HostContext.ExtensionID 로 스코프를 고정해 주입하므로, 다른 Extension 의 설정이나
 // Core 설정을 읽을 방법이 인터페이스 상 존재하지 않는다.
 //
+// ⚠ **Get 은 config.read, Set 은 config.write 다.**
+// 이 인터페이스는 v1 하위호환을 위해 두 메서드를 그대로 들고 있지만, config.write 를 선언하지
+// 않은 확장에서 Set 을 부르면 Core 가 PERMISSION_DENIED 오류를 돌려준다(타입은 그대로 두고
+// 런타임에서 막는다 — 인터페이스에서 메서드를 빼면 기존 확장이 컴파일되지 않는다).
+// 새로 작성하는 코드는 위 두 인터페이스를 Resolver 로 얻는 쪽을 권장한다.
+//
 // Set 은 Manifest 가 선언한 스키마 범위 밖의 키를 거부할 수 있다(Core 구현 정책).
 type ConfigService interface {
-	Get(ctx context.Context) (map[string]any, error)
-	Set(ctx context.Context, values map[string]any) error
+	ConfigReadService
+	ConfigWriteService
 }

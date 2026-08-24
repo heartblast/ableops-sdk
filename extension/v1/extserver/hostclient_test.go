@@ -305,7 +305,7 @@ func TestConfigService_조회저장(t *testing.T) {
 	})
 
 	c, _ := newTestClient(t, f)
-	svc := &configService{c: c}
+	svc := &configService{c: c, canWrite: true}
 
 	values, err := svc.Get(context.Background())
 	if err != nil || values["greeting"] != "반갑습니다" {

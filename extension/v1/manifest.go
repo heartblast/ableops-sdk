@@ -108,11 +108,40 @@ func (m Manifest) SupportsMigrationRollback() bool {
 	return m.MigrationRollbackMode() == MigrationRollbackDown
 }
 
+// 프론트엔드 실행 모드(frontend.kind) — **신뢰 모델의 선언**이다.
+//
+// 현재 원격 번들은 Core 와 같은 브라우저 컨텍스트에서 실행되는 ES 모듈이며 보안 샌드박스가
+// **아니다**(같은 페이지의 JavaScript 는 localStorage 의 로그인 토큰에 접근할 수 있다).
+// 그래서 지금 허용하는 값은 trusted-module 하나뿐이고, 미신뢰 제3자 UI 는 지원하지 않는다.
+//
+// 이름을 지금 정의해 두는 이유는 **나중에 실행 모드를 추가할 수 있게** 하기 위해서다.
+// 필드가 없으면 미래의 격리 실행 모드를 도입할 때 Manifest 스키마 자체를 바꿔야 하고,
+// 그것은 이미 배포된 패키지 전부에 영향을 준다.
+const (
+	// FrontendKindTrustedModule 은 현재 유일한 모드다(Core 컨텍스트에서 ES 모듈로 실행).
+	FrontendKindTrustedModule = "trusted-module"
+	// FrontendKindIsolatedFrame 은 **후속 과제**다 — iframe 으로 격리 실행한다.
+	//
+	// ⚠ 상수만 정의하고 Core 는 아직 실행하지 않는다. 선언하면 설치가 거부된다
+	// (조용히 trusted 로 실행하면 "격리했다고 믿는데 아닌" 최악의 상태가 된다).
+	FrontendKindIsolatedFrame = "isolated-frame"
+)
+
 // FrontendDecl 은 Extension 프론트엔드 기여 방식 선언이다.
 type FrontendDecl struct {
 	Enabled bool `json:"enabled" yaml:"enabled"`
 	// Entry 가 비어 있으면 Core 프론트의 built-in 레지스트리(id → lazy 페이지)를 사용한다.
 	Entry string `json:"entry,omitempty" yaml:"entry,omitempty"`
+	// Kind 는 실행 모드다(비우면 trusted-module).
+	Kind string `json:"kind,omitempty" yaml:"kind,omitempty"`
+}
+
+// FrontendMode 는 선언된 프론트 실행 모드를 반환한다(비어 있으면 trusted-module).
+func (m Manifest) FrontendMode() string {
+	if v := strings.TrimSpace(m.Frontend.Kind); v != "" {
+		return v
+	}
+	return FrontendKindTrustedModule
 }
 
 // Manifest 는 extension.yaml 과 1:1 대응하는 Extension 선언이다.
@@ -166,6 +195,7 @@ func (m *Manifest) normalize() {
 	// 통과해 계약 값이 두 가지가 된다(backend.kind 와 같은 규칙).
 	m.Backend.Migrations.Rollback = strings.TrimSpace(m.Backend.Migrations.Rollback)
 	m.Frontend.Entry = strings.TrimSpace(m.Frontend.Entry)
+	m.Frontend.Kind = strings.TrimSpace(m.Frontend.Kind)
 
 	for i, c := range m.Capabilities {
 		m.Capabilities[i] = Capability(strings.TrimSpace(string(c)))
@@ -256,6 +286,18 @@ func (m Manifest) Validate() error {
 	if v := m.Backend.Migrations.Rollback; v != "" && v != MigrationRollbackNone && v != MigrationRollbackDown {
 		errs = append(errs, fmt.Errorf("backend.migrations.rollback 이 올바르지 않습니다: %q (%s | %s)",
 			v, MigrationRollbackNone, MigrationRollbackDown))
+	}
+
+	// 7-2) frontend.kind — 알 수 없는 값과 아직 구현하지 않은 모드를 **거부**한다.
+	//
+	// isolated-frame 을 조용히 trusted-module 로 떨어뜨리면 배포자는 격리되었다고 믿는데
+	// 실제로는 Core 와 같은 컨텍스트에서 도는 최악의 상태가 된다.
+	switch k := m.Frontend.Kind; k {
+	case "", FrontendKindTrustedModule:
+	case FrontendKindIsolatedFrame:
+		errs = append(errs, fmt.Errorf("frontend.kind %q 는 아직 지원하지 않습니다(현재 지원: %s)", k, FrontendKindTrustedModule))
+	default:
+		errs = append(errs, fmt.Errorf("frontend.kind 가 올바르지 않습니다: %q (%s)", k, FrontendKindTrustedModule))
 	}
 
 	// 8) 라우트 경로 접두

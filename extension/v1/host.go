@@ -32,7 +32,12 @@ type Logger interface {
 // 따라서 **항상 Require* 접근자를 통해 사용**한다 — 미선언 시 한국어 오류를 돌려준다.
 //
 //	svc, err := host.RequireKafka()
-//	if err != nil { return err }   // "확장 기능 sample: kafka.read capability 미선언 ..."
+//	if err != nil { return err }   // "[CAPABILITY_UNAVAILABLE] 확장 기능 sample: kafka.read ..."
+//
+// ⚠ **직접 생성하지 않는다.** 운영 경로에서는 Core 가 만들어 Start 로 넘겨 준다.
+// 테스트에서 필요하면 sdk/extension/v1/testkit 의 testkit.NewHost(...) 를 쓴다 —
+// 이 구조체는 v1 이 사는 동안 필드가 **추가**될 수 있고, 그때 unkeyed composite literal
+// (HostContext{a, b, c})은 컴파일이 깨진다. keyed literal 이나 testkit 은 깨지지 않는다.
 type HostContext struct {
 	// ExtensionID 는 이 컨텍스트를 받는 Extension 의 ID 다(설정·감사·로그 스코프의 기준).
 	ExtensionID string
@@ -43,68 +48,76 @@ type HostContext struct {
 	Clusters ClusterRegistry       // capability: cluster.read
 	Workflow WorkflowSubmitService // capability: workflow.submit
 	Audit    AuditService          // capability: audit.write
-	Config   ConfigService         // capability: config.read
+	Config   ConfigService         // capability: config.read(Get) + config.write(Set)
 	Secrets  SecretRefService      // capability: secret.ref
+
+	// Services 는 **신규 capability 의 주입 지점**이다(services.go).
+	//
+	// 위 필드는 v1 초기 계약이라 그대로 유지하지만, 앞으로 추가되는 capability 는 필드를 늘리지
+	// 않고 이 Resolver 로만 제공한다. 그래야 capability 가 늘어도 공개 구조체가 커지지 않는다.
+	//
+	//	w, err := extensionv1.RequireService[extensionv1.ConfigWriteService](host, extensionv1.CapConfigWrite)
+	//
+	// nil 이어도 된다 — 그 경우 조회는 위 필드로만 이뤄진다(테스트에서 흔한 형태다).
+	Services ServiceResolver
 
 	Log Logger
 }
 
-// capabilityError 는 미제공 capability 접근 시의 한국어 오류를 만든다.
-func (h HostContext) capabilityError(c Capability) error {
-	id := h.ExtensionID
-	if id == "" {
-		id = "(알 수 없음)"
+// extensionIDForError 는 오류 문구에 쓸 확장 ID 다(미주입 시 자리표시자).
+func (h HostContext) extensionIDForError() string {
+	if h.ExtensionID == "" {
+		return "(알 수 없음)"
 	}
-	return fmt.Errorf("확장 기능 %s: %s capability 를 사용할 수 없습니다(Manifest capabilities 에 선언했는지 확인하세요): %w",
-		id, string(c), ErrCapabilityUnavailable)
+	return h.ExtensionID
+}
+
+// capabilityError 는 미제공 capability 접근 시의 오류를 만든다.
+//
+// CAPABILITY_UNAVAILABLE 코드가 붙고, 하위호환을 위해 센티널 ErrCapabilityUnavailable 도
+// 감싼다 — 기존 확장의 errors.Is(err, ErrCapabilityUnavailable) 가 계속 참이어야 한다.
+func (h HostContext) capabilityError(c Capability) error {
+	return WrapError(CodeCapabilityUnavailable,
+		fmt.Sprintf("확장 기능 %s: %s capability 를 사용할 수 없습니다(Manifest capabilities 에 선언했는지 확인하세요)",
+			h.extensionIDForError(), string(c)),
+		ErrCapabilityUnavailable)
 }
 
 // RequireKafka 는 Kafka 조회 서비스를 돌려준다(kafka.read 미선언 시 오류).
 func (h HostContext) RequireKafka() (KafkaReadService, error) {
-	if h.Kafka == nil {
-		return nil, h.capabilityError(CapKafkaRead)
-	}
-	return h.Kafka, nil
+	return RequireService[KafkaReadService](h, CapKafkaRead)
 }
 
 // RequireClusters 는 클러스터 레지스트리를 돌려준다(cluster.read 미선언 시 오류).
 func (h HostContext) RequireClusters() (ClusterRegistry, error) {
-	if h.Clusters == nil {
-		return nil, h.capabilityError(CapClusterRead)
-	}
-	return h.Clusters, nil
+	return RequireService[ClusterRegistry](h, CapClusterRead)
 }
 
 // RequireWorkflow 는 신청서 제출 서비스를 돌려준다(workflow.submit 미선언 시 오류).
 func (h HostContext) RequireWorkflow() (WorkflowSubmitService, error) {
-	if h.Workflow == nil {
-		return nil, h.capabilityError(CapWorkflowSubmit)
-	}
-	return h.Workflow, nil
+	return RequireService[WorkflowSubmitService](h, CapWorkflowSubmit)
 }
 
 // RequireAudit 는 감사 서비스를 돌려준다(audit.write 미선언 시 오류).
 func (h HostContext) RequireAudit() (AuditService, error) {
-	if h.Audit == nil {
-		return nil, h.capabilityError(CapAuditWrite)
-	}
-	return h.Audit, nil
+	return RequireService[AuditService](h, CapAuditWrite)
 }
 
 // RequireConfig 는 설정 서비스를 돌려준다(config.read 미선언 시 오류).
 func (h HostContext) RequireConfig() (ConfigService, error) {
-	if h.Config == nil {
-		return nil, h.capabilityError(CapConfigRead)
-	}
-	return h.Config, nil
+	return RequireService[ConfigService](h, CapConfigRead)
+}
+
+// RequireConfigWrite 는 설정 **저장** 서비스를 돌려준다(config.write 미선언 시 오류).
+//
+// RequireConfig().Set(...) 도 같은 판정을 받지만, 이쪽은 **호출 전에** 권한을 확인할 수 있다.
+func (h HostContext) RequireConfigWrite() (ConfigWriteService, error) {
+	return RequireService[ConfigWriteService](h, CapConfigWrite)
 }
 
 // RequireSecrets 는 시크릿 참조 서비스를 돌려준다(secret.ref 미선언 시 오류).
 func (h HostContext) RequireSecrets() (SecretRefService, error) {
-	if h.Secrets == nil {
-		return nil, h.capabilityError(CapSecretRef)
-	}
-	return h.Secrets, nil
+	return RequireService[SecretRefService](h, CapSecretRef)
 }
 
 // RequireIdentity 는 현재 요청 사용자를 돌려준다.
@@ -112,11 +125,11 @@ func (h HostContext) RequireSecrets() (SecretRefService, error) {
 // 처리하면 감사 기록이 거짓이 된다.
 func (h HostContext) RequireIdentity(ctx context.Context) (Identity, error) {
 	if h.Identity == nil {
-		return Identity{}, errors.New("사용자 컨텍스트가 주입되지 않았습니다(Core 배선 오류)")
+		return Identity{}, NewError(CodeHostUnavailable, "사용자 컨텍스트가 주입되지 않았습니다(Core 배선 오류)")
 	}
 	id, ok := h.Identity(ctx)
 	if !ok {
-		return Identity{}, errors.New("요청에 인증된 사용자 정보가 없습니다")
+		return Identity{}, NewError(CodePermissionDenied, "요청에 인증된 사용자 정보가 없습니다")
 	}
 	return id, nil
 }

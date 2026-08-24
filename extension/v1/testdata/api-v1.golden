@@ -1,0 +1,475 @@
+# package extensionv1 (extension/v1)
+  field ACLEntry.Host string `json:"host"`
+  field ACLEntry.Operation string `json:"operation"`
+  field ACLEntry.PatternType string `json:"patternType"`
+  field ACLEntry.PermissionType string `json:"permissionType"`
+  field ACLEntry.Principal string `json:"principal"`
+  field ACLEntry.ResourceName string `json:"resourceName"`
+  field ACLEntry.ResourceType string `json:"resourceType"`
+  field ACLFilter.Host string `json:"host,omitempty"`
+  field ACLFilter.Operation string `json:"operation,omitempty"`
+  field ACLFilter.PatternType string `json:"patternType,omitempty"`
+  field ACLFilter.PermissionType string `json:"permissionType,omitempty"`
+  field ACLFilter.Principal string `json:"principal,omitempty"`
+  field ACLFilter.ResourceName string `json:"resourceName,omitempty"`
+  field ACLFilter.ResourceType string `json:"resourceType,omitempty"`
+  field ACLGrantInput.ClusterID string `json:"clusterId"`
+  field ACLGrantInput.Entries []ACLEntry `json:"entries"`
+  field ACLGrantInput.Reason string `json:"reason,omitempty"`
+  field ACLRevokeInput.ClusterID string `json:"clusterId"`
+  field ACLRevokeInput.Entries []ACLEntry `json:"entries"`
+  field ACLRevokeInput.Reason string `json:"reason,omitempty"`
+  field AuditEntry.Action string `json:"action"`
+  field AuditEntry.Detail string `json:"detail,omitempty"`
+  field AuditEntry.HighRisk bool `json:"highRisk,omitempty"`
+  field AuditEntry.Result string `json:"result"`
+  field AuditEntry.Target string `json:"target,omitempty"`
+  field BackendDecl.Enabled bool `json:"enabled" yaml:"enabled"`
+  field BackendDecl.Kind string `json:"kind,omitempty" yaml:"kind,omitempty"`
+  field BackendDecl.Migrations MigrationsDecl `json:"migrations,omitzero" yaml:"migrations,omitempty"`
+  field ClusterInfo.Active bool `json:"active"`
+  field ClusterInfo.Environment string `json:"environment"`
+  field ClusterInfo.ID string `json:"id"`
+  field ClusterInfo.KafkaVersion string `json:"kafkaVersion,omitempty"`
+  field ClusterInfo.Name string `json:"name"`
+  field ConfigDecl.Schema []ConfigField `json:"schema,omitempty" yaml:"schema,omitempty"`
+  field ConfigField.Default any `json:"default,omitempty" yaml:"default,omitempty"`
+  field ConfigField.Key string `json:"key" yaml:"key"`
+  field ConfigField.Label string `json:"label,omitempty" yaml:"label,omitempty"`
+  field ConfigField.Required bool `json:"required,omitempty" yaml:"required,omitempty"`
+  field ConfigField.Secret bool `json:"secret,omitempty" yaml:"secret,omitempty"`
+  field ConfigField.Type string `json:"type,omitempty" yaml:"type,omitempty"`
+  field ConsumerGroupInfo.Members int `json:"members"`
+  field ConsumerGroupInfo.Name string `json:"name"`
+  field ConsumerGroupInfo.State string `json:"state"`
+  field ConsumerGroupInfo.TopicLag map[string]int64 `json:"topicLag,omitempty"`
+  field ConsumerGroupInfo.TotalLag int64 `json:"totalLag"`
+  field Error.Code ErrorCode `json:"code"`
+  field Error.Message string `json:"message"`
+  field Error.RequestID string `json:"requestId,omitempty"`
+  field FrontendDecl.Enabled bool `json:"enabled" yaml:"enabled"`
+  field FrontendDecl.Entry string `json:"entry,omitempty" yaml:"entry,omitempty"`
+  field FrontendDecl.Kind string `json:"kind,omitempty" yaml:"kind,omitempty"`
+  field Health.CheckedAt time.Time `json:"checkedAt"`
+  field Health.Message string `json:"message,omitempty"`
+  field Health.OK bool `json:"ok"`
+  field HostContext.Audit AuditService
+  field HostContext.Clusters ClusterRegistry
+  field HostContext.Config ConfigService
+  field HostContext.ExtensionID string
+  field HostContext.Identity func(ctx context.Context) (Identity, bool)
+  field HostContext.Kafka KafkaReadService
+  field HostContext.Log Logger
+  field HostContext.Secrets SecretRefService
+  field HostContext.Services ServiceResolver
+  field HostContext.Workflow WorkflowSubmitService
+  field Identity.Department string `json:"department"`
+  field Identity.Name string `json:"name"`
+  field Identity.Permissions []string `json:"permissions,omitempty"`
+  field Identity.RequestID string `json:"requestId,omitempty"`
+  field Identity.Roles []string `json:"roles,omitempty"`
+  field Identity.UserID string `json:"userId"`
+  field IncompatibleMessage.APIVersion string `json:"apiVersion,omitempty"`
+  field IncompatibleMessage.ProtocolVersion int `json:"protocolVersion,omitempty"`
+  field IncompatibleMessage.Reason string `json:"reason"`
+  field Manifest.APIVersion string `json:"apiVersion" yaml:"apiVersion"`
+  field Manifest.Backend BackendDecl `json:"backend,omitempty" yaml:"backend,omitempty"`
+  field Manifest.Capabilities []Capability `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
+  field Manifest.Config ConfigDecl `json:"config,omitempty" yaml:"config,omitempty"`
+  field Manifest.Description string `json:"description,omitempty" yaml:"description,omitempty"`
+  field Manifest.Frontend FrontendDecl `json:"frontend,omitempty" yaml:"frontend,omitempty"`
+  field Manifest.ID string `json:"id" yaml:"id"`
+  field Manifest.Menus []MenuDecl `json:"menus,omitempty" yaml:"menus,omitempty"`
+  field Manifest.Name string `json:"name" yaml:"name"`
+  field Manifest.Permissions []PermissionDecl `json:"permissions,omitempty" yaml:"permissions,omitempty"`
+  field Manifest.Publisher string `json:"publisher,omitempty" yaml:"publisher,omitempty"`
+  field Manifest.Requires Requires `json:"requires,omitempty" yaml:"requires,omitempty"`
+  field Manifest.Routes []RouteDecl `json:"routes,omitempty" yaml:"routes,omitempty"`
+  field Manifest.Version string `json:"version" yaml:"version"`
+  field MenuDecl.Icon string `json:"icon" yaml:"icon"`
+  field MenuDecl.Key string `json:"key" yaml:"key"`
+  field MenuDecl.Label string `json:"label" yaml:"label"`
+  field MenuDecl.Parent string `json:"parent,omitempty" yaml:"parent,omitempty"`
+  field MenuDecl.Path string `json:"path" yaml:"path"`
+  field MenuDecl.Permission string `json:"permission,omitempty" yaml:"permission,omitempty"`
+  field MigrationsDecl.Rollback string `json:"rollback,omitempty" yaml:"rollback,omitempty"`
+  field PermissionDecl.Key string `json:"key" yaml:"key"`
+  field PermissionDecl.Label string `json:"label" yaml:"label"`
+  field PermissionDecl.Roles []string `json:"roles,omitempty" yaml:"roles,omitempty"`
+  field ReadyMessage.APIVersion string `json:"apiVersion,omitempty"`
+  field ReadyMessage.Addr string `json:"addr"`
+  field ReadyMessage.ProtocolVersion int `json:"protocolVersion,omitempty"`
+  field ReadyMessage.Version string `json:"version,omitempty"`
+  field RequestRef.ID string `json:"requestId"`
+  field RequestRef.State string `json:"state"`
+  field Requires.Core string `json:"core,omitempty" yaml:"core,omitempty"`
+  field RouteDecl.Path string `json:"path" yaml:"path"`
+  field RouteDecl.Permission string `json:"permission,omitempty" yaml:"permission,omitempty"`
+  field RouteHandler.Handler http.Handler
+  field RouteHandler.Method string
+  field RouteHandler.Pattern string
+  field RouteHandler.Permission string
+  field SecretRef.Ref string `json:"ref"`
+  field TopicCreateInput.CleanupPolicy string `json:"cleanupPolicy,omitempty"`
+  field TopicCreateInput.ClusterID string `json:"clusterId"`
+  field TopicCreateInput.Configs map[string]string `json:"configs,omitempty"`
+  field TopicCreateInput.Name string `json:"name"`
+  field TopicCreateInput.Partitions int `json:"partitions"`
+  field TopicCreateInput.Reason string `json:"reason,omitempty"`
+  field TopicCreateInput.ReplicationFactor int `json:"replicationFactor"`
+  field TopicCreateInput.RetentionMs int64 `json:"retentionMs,omitempty"`
+  field TopicDeleteInput.ClusterID string `json:"clusterId"`
+  field TopicDeleteInput.Name string `json:"name"`
+  field TopicDeleteInput.Reason string `json:"reason,omitempty"`
+  field TopicDetail.Configs map[string]string `json:"configs,omitempty"`
+  field TopicDetail.Partitions []TopicPartitionInfo `json:"partitions,omitempty"`
+  field TopicDetail.Topic TopicInfo `json:"topic"`
+  field TopicInfo.Internal bool `json:"internal,omitempty"`
+  field TopicInfo.Name string `json:"name"`
+  field TopicInfo.Partitions int `json:"partitions"`
+  field TopicInfo.ReplicationFactor int `json:"replicationFactor"`
+  field TopicPartitionInfo.ISR []int32 `json:"isr,omitempty"`
+  field TopicPartitionInfo.Leader int32 `json:"leader"`
+  field TopicPartitionInfo.Partition int32 `json:"partition"`
+  field TopicPartitionInfo.Replicas []int32 `json:"replicas,omitempty"`
+  field TopicUpdateInput.ClusterID string `json:"clusterId"`
+  field TopicUpdateInput.Configs map[string]string `json:"configs,omitempty"`
+  field TopicUpdateInput.Name string `json:"name"`
+  field TopicUpdateInput.Partitions *int `json:"partitions,omitempty"`
+  field TopicUpdateInput.Reason string `json:"reason,omitempty"`
+  field TopicUpdateInput.RetentionMs *int64 `json:"retentionMs,omitempty"`
+  imethod AuditService.Record(context.Context, AuditEntry)
+  imethod ClusterRegistry.Get(context.Context, string) (ClusterInfo, bool)
+  imethod ClusterRegistry.List(context.Context) ([]ClusterInfo, error)
+  imethod ConfigReadService.Get(context.Context) (map[string]any, error)
+  imethod ConfigService.ConfigReadService
+  imethod ConfigService.ConfigWriteService
+  imethod ConfigWriteService.Set(context.Context, map[string]any) error
+  imethod Extension.Health(context.Context) Health
+  imethod Extension.Manifest() Manifest
+  imethod Extension.Routes() []RouteHandler
+  imethod Extension.Start(context.Context, HostContext) error
+  imethod Extension.Stop(context.Context) error
+  imethod KafkaReadService.DescribeTopic(context.Context, string, string) (TopicDetail, error)
+  imethod KafkaReadService.ListACLs(context.Context, string, ACLFilter) ([]ACLEntry, error)
+  imethod KafkaReadService.ListConsumerGroups(context.Context, string) ([]ConsumerGroupInfo, error)
+  imethod KafkaReadService.ListTopics(context.Context, string) ([]TopicInfo, error)
+  imethod Logger.Error(string, ...any)
+  imethod Logger.Info(string, ...any)
+  imethod Logger.Warn(string, ...any)
+  imethod SecretRefService.Resolve(context.Context, string) (SecretRef, error)
+  imethod ServiceResolver.Lookup(Capability) (any, bool)
+  imethod WorkflowSubmitService.SubmitACLGrant(context.Context, ACLGrantInput) (RequestRef, error)
+  imethod WorkflowSubmitService.SubmitACLRevoke(context.Context, ACLRevokeInput) (RequestRef, error)
+  imethod WorkflowSubmitService.SubmitTopicCreate(context.Context, TopicCreateInput) (RequestRef, error)
+  imethod WorkflowSubmitService.SubmitTopicDelete(context.Context, TopicDeleteInput) (RequestRef, error)
+  imethod WorkflowSubmitService.SubmitTopicUpdate(context.Context, TopicUpdateInput) (RequestRef, error)
+const APIVersion
+const AuditResultFailed
+const AuditResultSuccess
+const BackendKindBuiltin
+const BackendKindProcess
+const CapAuditWrite Capability
+const CapClusterRead Capability
+const CapConfigRead Capability
+const CapConfigWrite Capability
+const CapKafkaRead Capability
+const CapSecretRef Capability
+const CapWorkflowSubmit Capability
+const CodeCapabilityUnavailable ErrorCode
+const CodeConflict ErrorCode
+const CodeHostUnavailable ErrorCode
+const CodeIncompatible ErrorCode
+const CodeInternal ErrorCode
+const CodeInvalidArgument ErrorCode
+const CodeNotFound ErrorCode
+const CodePermissionDenied ErrorCode
+const CodeRateLimited ErrorCode
+const CodeTemporaryFailure ErrorCode
+const ConfigTypeBool
+const ConfigTypeInt
+const ConfigTypeSelect
+const ConfigTypeString
+const EnvHostAPIVersion
+const EnvProtocolVersion
+const FrontendKindIsolatedFrame
+const FrontendKindTrustedModule
+const HostAPIVersion
+const IncompatiblePrefix
+const MaxProtocolVersion
+const MigrationRollbackDown
+const MigrationRollbackNone
+const MinProtocolVersion
+const PhaseFailed InstallPhase
+const PhaseInstalled InstallPhase
+const PhaseInstalling InstallPhase
+const PhaseRollback InstallPhase
+const PhaseStaging InstallPhase
+const PhaseStarting InstallPhase
+const PhaseValidating InstallPhase
+const PhaseVerifying InstallPhase
+const ProtocolVersion
+const ReadyPrefix
+const StateDegraded State
+const StateDisabled State
+const StateFailed State
+const StateIncompatible State
+const StateInstalled State
+const StateNotInstalled State
+const StateRunning State
+const StateStarting State
+const StateUpdating State
+func AllCapabilities() []Capability
+func AllErrorCodes() []ErrorCode
+func AllStates() []State
+func CanTransition(State, State) bool
+func CodeForHTTPStatus(int) ErrorCode
+func CodeOf(error) ErrorCode
+func Errorf(ErrorCode, string, ...any) *Error
+func HTTPStatusForCode(ErrorCode) int
+func KnownCapability(Capability) bool
+func KnownErrorCode(ErrorCode) bool
+func NewError(ErrorCode, string) *Error
+func NormalizeState(string) State
+func ParseManifest([]byte) (Manifest, error)
+func ParsePermissionKey(string) (string, string, bool)
+func ParseProtocolVersion(string) (int, bool)
+func ParseSemver(string) (int, int, int, error)
+func PermissionKey(string, string) string
+func ProtocolMismatchReason(int) string
+func RequireService[T any](HostContext, Capability) (T, error)
+func RetryableCode(ErrorCode) bool
+func SatisfiesRange(string, string) (bool, error)
+func SupportsAPIVersion(string) bool
+func SupportsProtocolVersion(int) bool
+func ValidExtensionID(string) bool
+func ValidPermissionKey(string, string) bool
+func WrapError(ErrorCode, string, error) *Error
+method (*Error) Error() string
+method (*Error) Is(error) bool
+method (*Error) Unwrap() error
+method (*Error) WithRequestID(string) *Error
+method (HostContext) HasService(Capability) bool
+method (HostContext) Logger() Logger
+method (HostContext) LookupService(Capability) (any, bool)
+method (HostContext) RequireAudit() (AuditService, error)
+method (HostContext) RequireClusters() (ClusterRegistry, error)
+method (HostContext) RequireConfig() (ConfigService, error)
+method (HostContext) RequireConfigWrite() (ConfigWriteService, error)
+method (HostContext) RequireIdentity(context.Context) (Identity, error)
+method (HostContext) RequireKafka() (KafkaReadService, error)
+method (HostContext) RequireSecrets() (SecretRefService, error)
+method (HostContext) RequireWorkflow() (WorkflowSubmitService, error)
+method (Identity) HasPermission(string) bool
+method (Identity) HasRole(string) bool
+method (InstallPhase) IsTerminal() bool
+method (InstallPhase) Valid() bool
+method (Manifest) FrontendMode() string
+method (Manifest) HasCapability(Capability) bool
+method (Manifest) MigrationRollbackMode() string
+method (Manifest) Sanitized() Manifest
+method (Manifest) SupportsMigrationRollback() bool
+method (Manifest) Validate() error
+method (ReadyMessage) EffectiveProtocolVersion() int
+method (ServiceMap) Lookup(Capability) (any, bool)
+method (ServiceResolverFunc) Lookup(Capability) (any, bool)
+method (State) IsHealthy() bool
+method (State) Valid() bool
+type ACLEntry struct
+type ACLFilter struct
+type ACLGrantInput struct
+type ACLRevokeInput struct
+type AuditEntry struct
+type AuditService interface
+type BackendDecl struct
+type Capability string
+type ClusterInfo struct
+type ClusterRegistry interface
+type ConfigDecl struct
+type ConfigField struct
+type ConfigReadService interface
+type ConfigService interface
+type ConfigWriteService interface
+type ConsumerGroupInfo struct
+type Error struct
+type ErrorCode string
+type Extension interface
+type FrontendDecl struct
+type Health struct
+type HostContext struct
+type Identity struct
+type IncompatibleMessage struct
+type InstallPhase string
+type KafkaReadService interface
+type Logger interface
+type Manifest struct
+type MenuDecl struct
+type MigrationsDecl struct
+type PermissionDecl struct
+type ReadyMessage struct
+type RequestRef struct
+type Requires struct
+type RouteDecl struct
+type RouteHandler struct
+type SecretRef struct
+type SecretRefService interface
+type ServiceMap map[Capability]any
+type ServiceResolver interface
+type ServiceResolverFunc func(capability Capability) (any, bool)
+type State string
+type TopicCreateInput struct
+type TopicDeleteInput struct
+type TopicDetail struct
+type TopicInfo struct
+type TopicPartitionInfo struct
+type TopicUpdateInput struct
+type WorkflowSubmitService interface
+var ErrCapabilityUnavailable
+
+# package extserver (extension/v1/extserver)
+  field Environment.CallToken string
+  field Environment.Capabilities []extv1.Capability
+  field Environment.Config map[string]any
+  field Environment.ExtensionID string
+  field Environment.HostAPIVersion string
+  field Environment.HostToken string
+  field Environment.HostURL string
+  field Environment.MissingCapabilities []extv1.Capability
+  field Environment.ProtocolVersion int
+  field Environment.UnknownCapabilities []string
+  field Environment.UnsupportedCapabilities []extv1.Capability
+  field Environment.Version string
+  field HostError.Code extv1.ErrorCode
+  field HostError.Message string
+  field HostError.Method string
+  field HostError.Path string
+  field HostError.RequestID string
+  field HostError.StatusCode int
+const DirectRunMessage
+const EnvCallToken
+const EnvCapabilities
+const EnvConfig
+const EnvExtensionID
+const EnvExtensionVersion
+const EnvHostAPIVersion
+const EnvHostToken
+const EnvHostURL
+const EnvProtocolVersion
+const HeaderCallToken
+const HeaderExtensionID
+const HeaderOnBehalfOf
+const HeaderPermissions
+const HeaderPrefix
+const HeaderRequestID
+const HeaderRequestToken
+const HeaderRoles
+const HeaderUserDepartment
+const HeaderUserID
+const HeaderUserName
+const IncompatiblePrefix
+const ReadyPrefix
+func DecodeHeaderValue(string) string
+func EncodeHeaderValue(string) string
+func HostErrorCode(error) extv1.ErrorCode
+func HostStatusCode(error) int
+func IdentityFrom(context.Context) (extv1.Identity, bool)
+func LoadEnvironment(extv1.Manifest) (Environment, error)
+func RequestIDFrom(context.Context) string
+func Run(extv1.Extension, ...Option) error
+func RunContext(context.Context, extv1.Extension, ...Option) error
+func SetIdentityHeaders(http.Header, extv1.Identity)
+func WithHostTimeout(time.Duration) Option
+func WithIdentity(context.Context, extv1.Identity) context.Context
+func WithLogWriter(io.Writer) Option
+func WithRequestID(context.Context, string) context.Context
+func WithShutdownTimeout(time.Duration) Option
+func WithStdout(io.Writer) Option
+method (*HostError) AsSDKError() *extv1.Error
+method (*HostError) Error() string
+method (*HostError) Is(error) bool
+method (Environment) HasCapability(extv1.Capability) bool
+method (Environment) HostAPIPath(string) string
+method (Environment) String() string
+type Environment struct
+type HostError struct
+type Option func(*options)
+type ReadyMessage = extv1.ReadyMessage
+
+# package testkit (extension/v1/testkit)
+  field FakeAudit.Entries []extv1.AuditEntry
+  field FakeConfig.Writes []map[string]any
+  field FakeKafka.Calls []string
+  field FakeWorkflow.FailWith error
+  field FakeWorkflow.NextRef extv1.RequestRef
+  field FakeWorkflow.Submitted []SubmittedRequest
+  field Host.Audit *FakeAudit
+  field Host.Clusters *FakeClusters
+  field Host.Config *FakeConfig
+  field Host.Kafka *FakeKafka
+  field Host.Log *RecordingLogger
+  field Host.Secrets *FakeSecrets
+  field Host.Workflow *FakeWorkflow
+  field RecordingLogger.Lines []string
+  field SubmittedRequest.Input any
+  field SubmittedRequest.Kind string
+func CheckExtension(extv1.Extension, extv1.HostContext) []string
+func CheckHealth(extv1.Extension) []string
+func CheckLifecycle(extv1.Extension, extv1.HostContext) []string
+func CheckManifest(extv1.Manifest) []string
+func CheckRoutes(extv1.Extension) []string
+func NewFakeAudit() *FakeAudit
+func NewFakeClusters(...extv1.ClusterInfo) *FakeClusters
+func NewFakeConfig(map[string]any) *FakeConfig
+func NewFakeKafka() *FakeKafka
+func NewFakeSecrets(...string) *FakeSecrets
+func NewFakeWorkflow() *FakeWorkflow
+func NewHost(string, ...Option) *Host
+func NewRecordingLogger() *RecordingLogger
+func WithAudit(*FakeAudit) Option
+func WithClusters(*FakeClusters) Option
+func WithConfig(map[string]any) Option
+func WithIdentity(extv1.Identity) Option
+func WithIdentityFunc(func(context.Context) (extv1.Identity, bool)) Option
+func WithKafka(*FakeKafka) Option
+func WithLogger(*RecordingLogger) Option
+func WithSecrets(...string) Option
+func WithService(extv1.Capability, any) Option
+func WithWorkflow(*FakeWorkflow) Option
+func WithWritableConfig(map[string]any) Option
+method (*FakeAudit) Actions() []string
+method (*FakeAudit) Record(context.Context, extv1.AuditEntry)
+method (*FakeClusters) Get(context.Context, string) (extv1.ClusterInfo, bool)
+method (*FakeClusters) List(context.Context) ([]extv1.ClusterInfo, error)
+method (*FakeConfig) Get(context.Context) (map[string]any, error)
+method (*FakeConfig) Set(context.Context, map[string]any) error
+method (*FakeKafka) DescribeTopic(context.Context, string, string) (extv1.TopicDetail, error)
+method (*FakeKafka) FailWith(error) *FakeKafka
+method (*FakeKafka) ListACLs(context.Context, string, extv1.ACLFilter) ([]extv1.ACLEntry, error)
+method (*FakeKafka) ListConsumerGroups(context.Context, string) ([]extv1.ConsumerGroupInfo, error)
+method (*FakeKafka) ListTopics(context.Context, string) ([]extv1.TopicInfo, error)
+method (*FakeKafka) WithACLs(string, ...extv1.ACLEntry) *FakeKafka
+method (*FakeKafka) WithConsumerGroups(string, ...extv1.ConsumerGroupInfo) *FakeKafka
+method (*FakeKafka) WithTopicDetail(string, string, extv1.TopicDetail) *FakeKafka
+method (*FakeKafka) WithTopics(string, ...extv1.TopicInfo) *FakeKafka
+method (*FakeSecrets) Resolve(context.Context, string) (extv1.SecretRef, error)
+method (*FakeWorkflow) SubmitACLGrant(context.Context, extv1.ACLGrantInput) (extv1.RequestRef, error)
+method (*FakeWorkflow) SubmitACLRevoke(context.Context, extv1.ACLRevokeInput) (extv1.RequestRef, error)
+method (*FakeWorkflow) SubmitTopicCreate(context.Context, extv1.TopicCreateInput) (extv1.RequestRef, error)
+method (*FakeWorkflow) SubmitTopicDelete(context.Context, extv1.TopicDeleteInput) (extv1.RequestRef, error)
+method (*FakeWorkflow) SubmitTopicUpdate(context.Context, extv1.TopicUpdateInput) (extv1.RequestRef, error)
+method (*Host) Context() extv1.HostContext
+method (*RecordingLogger) Contains(string) bool
+method (*RecordingLogger) Error(string, ...any)
+method (*RecordingLogger) Info(string, ...any)
+method (*RecordingLogger) Warn(string, ...any)
+type FakeAudit struct
+type FakeClusters struct
+type FakeConfig struct
+type FakeKafka struct
+type FakeSecrets struct
+type FakeWorkflow struct
+type Host struct
+type Option func(*Host)
+type RecordingLogger struct
+type SubmittedRequest struct
+

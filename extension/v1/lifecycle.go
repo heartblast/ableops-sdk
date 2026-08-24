@@ -98,8 +98,13 @@ var allowedTransitions = map[State][]State{
 	StateInstalled: {StateStarting, StateDisabled, StateUpdating, StateNotInstalled, StateFailed, StateIncompatible},
 	// 비활성: 활성화(→STARTING), 업데이트, 삭제
 	StateDisabled: {StateStarting, StateInstalled, StateUpdating, StateNotInstalled, StateFailed},
-	// 시작 중: 성공(RUNNING) / 부분성공(DEGRADED) / 실패 / 시작 도중 비활성화
-	StateStarting: {StateRunning, StateDegraded, StateFailed, StateDisabled},
+	// 시작 중: 성공(RUNNING) / 부분성공(DEGRADED) / 실패 / 시작 도중 비활성화 / 계약 불일치
+	//
+	// ⚠ INCOMPATIBLE 이 여기 있는 이유: 외부 프로세스 Extension 의 프로토콜·API 버전 불일치는
+	// **기동 핸드셰이크에서** 드러난다(protocol.go). 그때 FAILED 로 두면 감시 루프가 재시작을
+	// 반복하는데, 몇 번을 다시 띄워도 결과가 같다. 계약 불일치는 재시작이 아니라 업데이트로만
+	// 해소되므로 별도 상태로 격리한다.
+	StateStarting: {StateRunning, StateDegraded, StateFailed, StateDisabled, StateIncompatible},
 	// 동작 중
 	StateRunning: {StateDegraded, StateDisabled, StateFailed, StateUpdating, StateIncompatible},
 	// 부분 동작: 회복하거나 악화하거나

@@ -60,6 +60,7 @@ type ctxKey int
 const (
 	ctxKeyIdentity ctxKey = iota
 	ctxKeyRequestToken
+	ctxKeyRequestID
 )
 
 // WithIdentity 는 컨텍스트에 사용자 신원을 넣는다.
@@ -81,6 +82,36 @@ func IdentityFrom(ctx context.Context) (extv1.Identity, bool) {
 		return extv1.Identity{}, false
 	}
 	return id, true
+}
+
+// WithRequestID 는 요청 추적 ID 를 컨텍스트에 넣는다.
+//
+// 신원(Identity)과 **따로** 보관한다: 사용자 컨텍스트가 없는 호출(백그라운드·익명)에도 추적 ID 는
+// 있어야 Browser → Core → Extension → Host API → Core Service 를 하나의 요청으로 이어 볼 수 있다.
+// 운영 경로에서는 extserver 미들웨어가 호출하며, 공개하는 이유는 확장의 단위 테스트가 같은
+// 컨텍스트를 만들 수 있어야 하기 때문이다.
+func WithRequestID(ctx context.Context, id string) context.Context {
+	if strings.TrimSpace(id) == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, ctxKeyRequestID, strings.TrimSpace(id))
+}
+
+// RequestIDFrom 은 요청 추적 ID 를 꺼낸다(없으면 빈 문자열).
+//
+// 확장은 이 값을 자기 로그·오류 응답에 실어 Core 로그와 대조할 수 있다.
+func RequestIDFrom(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v, ok := ctx.Value(ctxKeyRequestID).(string); ok {
+		return v
+	}
+	// 신원에 실려 온 값도 인정한다(구버전 경로 호환).
+	if id, ok := IdentityFrom(ctx); ok {
+		return id.RequestID
+	}
+	return ""
 }
 
 // withRequestToken 은 Core 가 발급한 단기 요청 토큰을 컨텍스트에 넣는다.

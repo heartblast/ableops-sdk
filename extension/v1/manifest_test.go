@@ -279,3 +279,37 @@ func TestManifestSanitized_시크릿_마스킹(t *testing.T) {
 		t.Error("Sanitized 가 비시크릿 필드를 훼손했다")
 	}
 }
+
+// TestManifest_frontendKind 는 프론트 실행 모드(신뢰 모델) 선언 규칙을 고정한다.
+//
+// ⚠ isolated-frame 을 조용히 trusted-module 로 떨어뜨리면 배포자는 격리되었다고 믿는데
+// 실제로는 Core 와 같은 컨텍스트에서 도는, 가장 나쁜 상태가 된다.
+func TestManifest_frontendKind(t *testing.T) {
+	base := func(kind string) Manifest {
+		m := Manifest{
+			APIVersion: APIVersion, ID: "sample-ui", Name: "샘플 화면", Version: "1.0.0",
+			Frontend: FrontendDecl{Enabled: true, Entry: "index.js", Kind: kind},
+		}
+		return m
+	}
+	if err := base("").Validate(); err != nil {
+		t.Fatalf("미지정 frontend.kind 가 거부됐다: %v", err)
+	}
+	if got := base("").FrontendMode(); got != FrontendKindTrustedModule {
+		t.Errorf("미지정 기본값이 다르다: %q", got)
+	}
+	if err := base(FrontendKindTrustedModule).Validate(); err != nil {
+		t.Fatalf("trusted-module 이 거부됐다: %v", err)
+	}
+	// 아직 구현하지 않은 모드는 **거부**한다.
+	if err := base(FrontendKindIsolatedFrame).Validate(); err == nil {
+		t.Error("isolated-frame 이 통과했다(아직 실행 경로가 없다)")
+	}
+	// 오타는 조용히 넘어가지 않는다.
+	if err := base("Trusted-Module").Validate(); err == nil {
+		t.Error("대소문자가 다른 값이 통과했다")
+	}
+	if err := base("sandbox").Validate(); err == nil {
+		t.Error("모르는 실행 모드가 통과했다")
+	}
+}

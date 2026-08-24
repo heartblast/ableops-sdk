@@ -6,6 +6,16 @@ package extensionv1
 // 즉 선언하지 않은 기능은 "권한 오류"가 아니라 **사용 자체가 불가능**하다(host.go 의 Require* 참조).
 
 // Capability 는 Extension 이 요구하는 Host 기능 단위다.
+//
+// # 이름 규칙 — 이름이 곧 권한의 상한이다
+//
+//	*.read    조회만 한다(상태를 바꾸지 않는다)
+//	*.write   변경한다
+//	*.submit  신청·요청만 한다(승인·반영은 Core 몫이다)
+//	*.ref     참조만 얻는다(실제 값은 받지 못한다)
+//
+// 이 규칙을 어기면(read 인데 쓰기까지 되면) 설치 관리자가 Manifest 만 보고 위험도를 판단할 수
+// 없게 된다. **기존 capability 의 의미를 조용히 넓히지 않는다** — 넓혀야 한다면 새 이름을 만든다.
 type Capability string
 
 const (
@@ -30,10 +40,22 @@ const (
 	// 불허: 감사로그 조회·수정·삭제(감사 기록은 추가 전용이다).
 	CapAuditWrite Capability = "audit.write"
 
-	// CapConfigRead 는 **자기 Extension 설정** 조회/저장을 허용한다(ConfigService).
-	// 허용: Manifest 가 선언한 config 스키마 범위의 값 읽기·쓰기.
-	// 불허: 다른 Extension 의 설정, Core 실행 설정(internal/config.Config) 접근.
+	// CapConfigRead 는 **자기 Extension 설정 조회**를 허용한다(ConfigService.Get).
+	// 허용: Manifest 가 선언한 config 스키마 범위의 값 읽기.
+	// 불허: 값 저장(→ config.write), 다른 Extension 의 설정, Core 실행 설정(internal/config.Config) 접근.
+	//
+	// ⚠ v1.6.2 까지는 이 capability 하나로 저장(Set)까지 되었다. 이름이 read 인데 쓰기까지
+	// 열려 있으면 설치 관리자가 Manifest 만 보고 위험도를 판단할 수 없다 — 그래서 분리했다.
+	// 저장이 필요한 확장은 config.write 를 **추가로** 선언해야 한다(마이그레이션 가이드 참조).
 	CapConfigRead Capability = "config.read"
+
+	// CapConfigWrite 는 **자기 Extension 설정 저장**을 허용한다(ConfigService.Set).
+	// 허용: Manifest 가 선언한 config 스키마 범위의 값 쓰기.
+	// 불허: 스키마 밖의 키, 다른 Extension 의 설정, Core 실행 설정.
+	//
+	// 조회까지 함께 필요하면 config.read 도 선언한다(write 가 read 를 포함하지 않는다 —
+	// 포함시키면 "쓰기만 허용" 이라는 선언이 표현 불가능해진다).
+	CapConfigWrite Capability = "config.write"
 
 	// CapSecretRef 는 시크릿 **참조(SecretRef)** 획득만 허용한다(SecretRefService).
 	// 허용: 참조 문자열 해석·유효성 확인.
@@ -49,6 +71,7 @@ func AllCapabilities() []Capability {
 		CapWorkflowSubmit,
 		CapAuditWrite,
 		CapConfigRead,
+		CapConfigWrite,
 		CapSecretRef,
 	}
 }
@@ -58,7 +81,7 @@ func AllCapabilities() []Capability {
 // Extension 이 런타임에 nil 역참조로 죽는다.
 func KnownCapability(c Capability) bool {
 	switch c {
-	case CapKafkaRead, CapClusterRead, CapWorkflowSubmit, CapAuditWrite, CapConfigRead, CapSecretRef:
+	case CapKafkaRead, CapClusterRead, CapWorkflowSubmit, CapAuditWrite, CapConfigRead, CapConfigWrite, CapSecretRef:
 		return true
 	}
 	return false

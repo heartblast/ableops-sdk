@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -28,7 +29,12 @@ import (
 
 const (
 	// ReadyPrefix 는 기동 핸드셰이크 줄의 접두다(Core 가 이 줄을 기다린다).
-	ReadyPrefix = "ABLEOPS_EXT_READY"
+	//
+	// 값은 SDK 프로토콜 정의(extensionv1/protocol.go)를 그대로 재노출한다 — 접두 문자열이
+	// 두 곳에 따로 있으면 한쪽만 고쳤을 때 Core 가 영영 기동 신호를 못 본다.
+	ReadyPrefix = extv1.ReadyPrefix
+	// IncompatiblePrefix 는 기동 전 호환성 실패를 알리는 줄의 접두다.
+	IncompatiblePrefix = extv1.IncompatiblePrefix
 	// healthPath 는 extserver 가 직접 제공하는 헬스 경로다(Core 가 주기적으로 폴링한다).
 	healthPath = "/health"
 	// listenAddr 는 리스닝 주소다. 포트 0 = 커널이 빈 포트를 고르고 우리가 실제 주소를 알린다.
@@ -49,21 +55,23 @@ const (
 //
 // Core 는 `/api/extensions/{id}/health` 같은 경로를 자기 관리 API 로 처리하므로, 확장이 같은
 // 이름을 쓰면 그 라우트는 **영원히 도달할 수 없다**. 여기서 미리 거부해 기동 시점에 알려준다.
+// ⚠ Core 의 internal/extensionhost/manifest_load.go(reservedSubPaths)와 **같은 목록**이어야 한다.
+// 한쪽만 늘리면 Manifest 검증은 통과하는데 실제로는 도달할 수 없는 라우트가 생긴다.
 var reservedSubPaths = map[string]bool{
 	"health":         true,
 	"install-events": true,
 	"enable":         true,
 	"disable":        true,
 	"update":         true,
+	"rollback":       true,
+	"assets":         true,
 }
 
-// ReadyMessage 는 기동 핸드셰이크 줄의 JSON 본문이다.
-type ReadyMessage struct {
-	// Addr 는 실제 리스닝 주소다(항상 127.0.0.1:<포트>).
-	Addr string `json:"addr"`
-	// Version 은 실행 중인 확장 버전이다.
-	Version string `json:"version"`
-}
+// ReadyMessage 는 기동 핸드셰이크 줄의 JSON 본문이다(SDK 프로토콜 정의의 별칭).
+//
+// 별칭으로 두는 이유: Core 와 SDK 가 **같은 구조체**를 써야 필드를 추가할 때 한쪽만 바뀌는 일이
+// 생기지 않는다. 기존 코드의 extserver.ReadyMessage{Addr:…, Version:…} 는 그대로 컴파일된다.
+type ReadyMessage = extv1.ReadyMessage
 
 // options 는 Run 의 동작 옵션이다(기본값은 운영 환경 기준).
 type options struct {
@@ -179,14 +187,28 @@ func RunContext(ctx context.Context, ext extv1.Extension, opts ...Option) error 
 		return fmt.Errorf("Manifest 검증에 실패했습니다(패키지 자산을 확인하세요): %w", err)
 	}
 
-	// 2) 환경변수(프로토콜 §1)
+	// 2) 환경변수·프로토콜·capability 협상(프로토콜 §1)
 	env, err := loadEnvironment(o.lookupEnv, manifest)
 	if err != nil {
+		// 프로토콜 불일치는 **재시작해도 결과가 같다**. Core 가 크래시로 오인해 백오프를 두고
+		// 반복 재시작하지 않도록, stdout 한 줄로 사유를 알린 뒤 종료한다(protocol.go 주석).
+		var mismatch *protocolMismatchError
+		if errors.As(err, &mismatch) {
+			writeIncompatible(o.stdout, mismatch.reason)
+		}
 		return err
 	}
 	logger := newLogger(o.logWriter, env.ExtensionID)
 	for _, name := range env.UnknownCapabilities {
 		logger.Warn("이 SDK 가 모르는 capability 를 Core 가 전달했습니다(무시합니다)", "capability", name)
+	}
+	for _, c := range env.MissingCapabilities {
+		logger.Warn("Manifest 가 선언한 capability 를 Core 가 허용하지 않았습니다(사용 시 CAPABILITY_UNAVAILABLE)",
+			"capability", string(c))
+	}
+	for _, c := range env.UnsupportedCapabilities {
+		logger.Warn("이 SDK 는 외부 프로세스 확장에서 해당 capability 의 클라이언트를 제공하지 않습니다(사용 시 CAPABILITY_UNAVAILABLE)",
+			"capability", string(c))
 	}
 
 	// 3) 종료 컨텍스트 — 신호·부모 프로세스 종료·상위 ctx 취소를 한 지점으로 모은다.
@@ -240,12 +262,14 @@ func RunContext(ctx context.Context, ext extv1.Extension, opts ...Option) error 
 
 	// 8) 기동 핸드셰이크 — **리스닝을 시작한 뒤에만** 출력한다.
 	//    Core 는 이 줄을 보는 즉시 프록시를 시작하므로, 먼저 출력하면 첫 요청이 연결 거부된다.
-	if err := writeHandshake(o.stdout, ln.Addr().String(), env.Version); err != nil {
+	if err := writeHandshake(o.stdout, ln.Addr().String(), env); err != nil {
 		shutdown(srv, o.shutdownTimeout)
 		return err
 	}
 	logger.Info("외부 프로세스 확장 기능을 시작했습니다",
-		"addr", ln.Addr().String(), "version", env.Version, "capabilities", capabilityNames(env.Capabilities))
+		"addr", ln.Addr().String(), "version", env.Version,
+		"protocol", env.ProtocolVersion, "apiVersion", extv1.APIVersion,
+		"capabilities", capabilityNames(env.Capabilities))
 
 	// 자기 진단: Host API 연결 확인. 실패해도 기동을 막지 않는다 —
 	// Core 가 Host API 를 늦게 열 수 있고, 확장의 모든 기능이 Host API 를 쓰는 것도 아니다.
@@ -333,8 +357,16 @@ func checkLoopback(addr net.Addr) error {
 }
 
 // writeHandshake 는 기동 핸드셰이크 한 줄을 출력한다.
-func writeHandshake(w io.Writer, addr, version string) error {
-	body, err := json.Marshal(ReadyMessage{Addr: addr, Version: version})
+//
+// 프로토콜 1의 원래 필드(addr·version)는 그대로 채우고 apiVersion·protocolVersion 을 **추가**한다.
+// 구버전 Core 는 모르는 필드를 무시하므로 하위호환이 유지된다.
+func writeHandshake(w io.Writer, addr string, env Environment) error {
+	body, err := json.Marshal(ReadyMessage{
+		Addr:            addr,
+		Version:         env.Version,
+		APIVersion:      extv1.APIVersion,
+		ProtocolVersion: extv1.ProtocolVersion,
+	})
 	if err != nil {
 		return fmt.Errorf("기동 핸드셰이크 메시지를 만들 수 없습니다: %w", err)
 	}
@@ -345,6 +377,35 @@ func writeHandshake(w io.Writer, addr, version string) error {
 		_ = f.Sync() // 파이프 대상에서는 실패할 수 있으나 Go 의 stdout 은 버퍼링하지 않으므로 무해하다.
 	}
 	return nil
+}
+
+// writeIncompatible 은 호환성 실패 한 줄을 출력한다(Core 가 INCOMPATIBLE 로 격리한다).
+//
+// 출력 실패는 무시한다 — 이 시점에는 이미 종료 경로이고, 알릴 방법이 없다고 해서 더 할 수 있는
+// 일도 없다(Core 는 프로세스 조기 종료로 감지한다).
+func writeIncompatible(w io.Writer, reason string) {
+	body, err := json.Marshal(extv1.IncompatibleMessage{
+		Reason:          reason,
+		ProtocolVersion: extv1.ProtocolVersion,
+		APIVersion:      extv1.APIVersion,
+	})
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "%s %s\n", IncompatiblePrefix, body)
+	if f, ok := w.(*os.File); ok {
+		_ = f.Sync()
+	}
+}
+
+// reservedSubPathList 는 오류 문구용 예약 서브경로 목록이다(정렬 — 문구가 실행마다 흔들리지 않게).
+func reservedSubPathList() string {
+	names := make([]string, 0, len(reservedSubPaths))
+	for k := range reservedSubPaths {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 // capabilityNames 는 로그용 capability 이름 목록을 만든다.
@@ -420,7 +481,7 @@ func normalizePattern(raw string) (string, error) {
 		return "", fmt.Errorf("확장 라우트에 절대 API 경로를 쓸 수 없습니다: %q (Core 가 /api/extensions/<id> 아래에 마운트한다)", raw)
 	}
 	if head := firstSegment(p); reservedSubPaths[head] {
-		return "", fmt.Errorf("확장 라우트 %q 는 Core 관리 API 가 선점한 예약 서브경로입니다(예약: health, install-events, enable, disable, update)", raw)
+		return "", fmt.Errorf("확장 라우트 %q 는 Core 관리 API 가 선점한 예약 서브경로입니다(예약: %s)", raw, reservedSubPathList())
 	}
 	return p, nil
 }
@@ -487,6 +548,10 @@ func identityMiddleware(next http.Handler) http.Handler {
 		if id := identityFromRequest(r); id.UserID != "" {
 			ctx = WithIdentity(ctx, id)
 		}
+		// ⚠ 요청 추적 ID 는 신원과 **독립적으로** 저장한다. Identity 안에만 두면 익명 요청
+		// (사용자 컨텍스트 없는 호출)에서 상관관계가 끊겨 Browser→Core→Extension→Host API 를
+		// 하나의 요청으로 이어 볼 수 없다(요구 §16).
+		ctx = WithRequestID(ctx, strings.TrimSpace(r.Header.Get(HeaderRequestID)))
 		ctx = withRequestToken(ctx, strings.TrimSpace(r.Header.Get(HeaderRequestToken)))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
