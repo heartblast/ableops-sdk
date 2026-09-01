@@ -51,12 +51,12 @@ func TestExternalConsumerCompiles(t *testing.T) {
 	if err := os.Remove(filepath.Join(work, "go.mod.tmpl")); err != nil {
 		t.Fatalf("템플릿 제거 실패: %v", err)
 	}
-	gomod := strings.ReplaceAll(string(tmpl), "__REPO_ROOT__", filepath.ToSlash(repoRoot))
+	gomod := strings.ReplaceAll(string(tmpl), "__SDK_ROOT__", filepath.ToSlash(filepath.Join(repoRoot, "sdk")))
 	if err := os.WriteFile(filepath.Join(work, "go.mod"), []byte(gomod), 0o600); err != nil {
 		t.Fatalf("go.mod 작성 실패: %v", err)
 	}
-	// go.sum 은 저장소의 것을 그대로 쓴다(항목이 더 많은 것은 무해하다).
-	if sum, err := os.ReadFile(filepath.Join(repoRoot, "go.sum")); err == nil {
+	// go.sum 은 **SDK 모듈의 것**을 쓴다(SDK 는 독립 모듈이다).
+	if sum, err := os.ReadFile(filepath.Join(repoRoot, "sdk", "go.sum")); err == nil {
 		if err := os.WriteFile(filepath.Join(work, "go.sum"), sum, 0o600); err != nil {
 			t.Fatalf("go.sum 복사 실패: %v", err)
 		}
