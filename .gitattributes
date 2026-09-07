@@ -1,0 +1,24 @@
+# AbleOps SDK — 줄바꿈 정규화
+#
+# ⚠ 이 파일이 없으면 **Windows 에서 clone 한 개발자만** 테스트가 깨진다.
+# Git 의 core.autocrlf=true 는 체크아웃 시 텍스트 파일을 CRLF 로 바꾸는데,
+# extension/v1/testdata/api-v1.golden 은 테스트가 LF 로 생성한 문자열과 **바이트 비교**된다.
+# 그래서 코드를 한 줄도 건드리지 않았는데 TestPublicAPISnapshot 이
+# 「공개 API 가 골든과 다르다」로 실패하고, 그 diff 는 파일 전체가 바뀐 것처럼 보인다.
+# (Core 저장소에서는 루트 .gitattributes 가 이 역할을 했다. 분리되면서 따라오지 않았다.)
+#
+# gofmt 도 같은 이유로 CRLF 소스를 「미적용」으로 보고한다.
+* text=auto eol=lf
+
+# Go
+*.go    text eol=lf
+*.mod   text eol=lf
+*.sum   text eol=lf
+
+# 계약·문서·설정
+*.md      text eol=lf
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.ts      text eol=lf
+*.golden  text eol=lf
+*.tmpl    text eol=lf
