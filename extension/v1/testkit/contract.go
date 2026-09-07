@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 // reservedSubPaths 는 Core 관리 API 가 선점한 서브경로다.

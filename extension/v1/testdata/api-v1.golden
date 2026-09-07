@@ -210,6 +210,7 @@ const PhaseValidating InstallPhase
 const PhaseVerifying InstallPhase
 const ProtocolVersion
 const ReadyPrefix
+const SDKVersion
 const StateDegraded State
 const StateDisabled State
 const StateFailed State

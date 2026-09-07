@@ -47,5 +47,5 @@
 //
 // # 권장 import
 //
-//	import extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+//	import extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 package extensionv1

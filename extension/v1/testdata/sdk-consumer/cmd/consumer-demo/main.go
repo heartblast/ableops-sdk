@@ -6,7 +6,7 @@ import (
 	"os"
 
 	consumer "example.com/ableops-consumer-demo"
-	"github.com/heartblast/kafka-control-portal/sdk/extension/v1/extserver"
+	"github.com/heartblast/ableops-sdk/extension/v1/extserver"
 )
 
 func main() {

@@ -15,7 +15,7 @@ import (
 	"os"
 	"strings"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 // Core 가 주입하는 환경변수 이름.

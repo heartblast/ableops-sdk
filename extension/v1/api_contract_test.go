@@ -38,7 +38,7 @@ import (
 // goldenPath 는 공개 API 스냅샷 파일이다.
 const goldenPath = "testdata/api-v1.golden"
 
-// snapshotPackages 는 스냅샷 대상 패키지다(경로는 sdk/ 기준 상대).
+// snapshotPackages 는 스냅샷 대상 패키지다(경로는 SDK 모듈 루트 기준 상대).
 //
 // testkit 을 포함하는 이유: 외부 개발자의 테스트 코드가 이 API 에 직접 의존하므로,
 // 조용히 바뀌면 그들의 테스트가 깨진다.
@@ -50,15 +50,15 @@ var snapshotPackages = []string{
 
 // TestPublicAPISnapshot 은 공개 심볼 목록이 골든과 일치하는지 확인한다.
 func TestPublicAPISnapshot(t *testing.T) {
-	root := repoRootDir(t)
+	root := sdkModuleRoot(t)
 	var lines []string
 	for _, pkg := range snapshotPackages {
-		dir := filepath.Join(root, "sdk", filepath.FromSlash(pkg))
+		dir := filepath.Join(root, filepath.FromSlash(pkg))
 		lines = append(lines, renderPackageAPI(t, pkg, dir)...)
 	}
 	got := strings.Join(lines, "\n") + "\n"
 
-	goldenFile := filepath.Join(root, "sdk", "extension", "v1", filepath.FromSlash(goldenPath))
+	goldenFile := filepath.Join(root, "extension", "v1", filepath.FromSlash(goldenPath))
 	if os.Getenv("UPDATE_SDK_API_GOLDEN") == "1" {
 		if err := os.MkdirAll(filepath.Dir(goldenFile), 0o750); err != nil {
 			t.Fatalf("골든 디렉터리 생성 실패: %v", err)

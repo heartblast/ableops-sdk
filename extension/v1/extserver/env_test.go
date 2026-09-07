@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 // testManifest 는 검증을 통과하는 최소 Manifest 를 만든다.

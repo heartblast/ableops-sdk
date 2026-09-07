@@ -15,7 +15,7 @@ import (
 	"net/url"
 	"strings"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 // Core 가 생성하는 요청 헤더 이름.

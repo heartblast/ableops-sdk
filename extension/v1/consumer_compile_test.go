@@ -23,7 +23,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -38,8 +37,8 @@ func TestExternalConsumerCompiles(t *testing.T) {
 		t.Skipf("go 실행 파일을 찾을 수 없다: %v", err)
 	}
 
-	repoRoot := repoRootDir(t)
-	fixture := filepath.Join(repoRoot, "sdk", "extension", "v1", "testdata", "sdk-consumer")
+	sdkRoot := sdkModuleRoot(t)
+	fixture := filepath.Join(sdkRoot, "extension", "v1", "testdata", "sdk-consumer")
 	work := t.TempDir()
 	copyTree(t, fixture, work)
 
@@ -51,12 +50,12 @@ func TestExternalConsumerCompiles(t *testing.T) {
 	if err := os.Remove(filepath.Join(work, "go.mod.tmpl")); err != nil {
 		t.Fatalf("템플릿 제거 실패: %v", err)
 	}
-	gomod := strings.ReplaceAll(string(tmpl), "__SDK_ROOT__", filepath.ToSlash(filepath.Join(repoRoot, "sdk")))
+	gomod := strings.ReplaceAll(string(tmpl), "__SDK_ROOT__", filepath.ToSlash(sdkRoot))
 	if err := os.WriteFile(filepath.Join(work, "go.mod"), []byte(gomod), 0o600); err != nil {
 		t.Fatalf("go.mod 작성 실패: %v", err)
 	}
 	// go.sum 은 **SDK 모듈의 것**을 쓴다(SDK 는 독립 모듈이다).
-	if sum, err := os.ReadFile(filepath.Join(repoRoot, "sdk", "go.sum")); err == nil {
+	if sum, err := os.ReadFile(filepath.Join(sdkRoot, "go.sum")); err == nil {
 		if err := os.WriteFile(filepath.Join(work, "go.sum"), sum, 0o600); err != nil {
 			t.Fatalf("go.sum 복사 실패: %v", err)
 		}
@@ -82,21 +81,6 @@ func TestExternalConsumerCompiles(t *testing.T) {
 	if out, err := vet.CombinedOutput(); err != nil {
 		t.Fatalf("외부 모듈 vet 실패:\n%s", out)
 	}
-}
-
-// repoRootDir 는 이 테스트 파일 기준으로 저장소 루트를 찾는다.
-func repoRootDir(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("호출 위치를 알 수 없다")
-	}
-	// <root>/sdk/extension/v1/consumer_compile_test.go → 4단계 위가 루트
-	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
-	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
-		t.Fatalf("저장소 루트를 찾지 못했다(%s): %v", root, err)
-	}
-	return root
 }
 
 // copyTree 는 디렉터리를 통째로 복사한다(픽스처를 임시 디렉터리에서 빌드하기 위해).

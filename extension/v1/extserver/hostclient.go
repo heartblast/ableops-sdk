@@ -30,7 +30,7 @@ import (
 	"strings"
 	"time"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 const (

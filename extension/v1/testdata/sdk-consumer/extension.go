@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
-	"github.com/heartblast/kafka-control-portal/sdk/extension/v1/extserver"
-	"github.com/heartblast/kafka-control-portal/sdk/extension/v1/testkit"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
+	"github.com/heartblast/ableops-sdk/extension/v1/extserver"
+	"github.com/heartblast/ableops-sdk/extension/v1/testkit"
 )
 
 // Extension 은 SDK 계약만으로 구현한 예제 확장이다.

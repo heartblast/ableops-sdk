@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 // TestLoadEnvironment_프로토콜미설정은최초버전 은 구버전 Core 하위호환을 고정한다.

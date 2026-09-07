@@ -1,0 +1,34 @@
+# 최소 Extension Manifest — 외부 프로세스 방식.
+#
+# Core 는 이 파일만 보고 확장의 권한·라우트·메뉴를 판단한다. 코드가 아니라 **선언**이므로
+# 설치 관리자가 실행하기 전에 위험도를 읽을 수 있다.
+apiVersion: ableops.io/extension/v1
+id: hello
+name: Hello Extension
+version: 1.0.0
+description: AbleOps SDK 최소 예제 — 클러스터 목록을 읽어 개수만 돌려준다.
+vendor: AbleOps
+
+# 이 확장이 요구하는 Core 버전. 비우면 제한 없음.
+requires:
+  core: ">=1.7.0 <2.0.0"
+
+# 선언한 capability 에 대응하는 서비스만 HostContext 에 주입된다.
+# 선언하지 않으면 그 필드는 nil 이다(타입 수준 차단).
+capabilities:
+  - cluster.read
+
+# 권한 키는 반드시 자기 네임스페이스(ext.<id>.<action>)여야 한다.
+permissions:
+  - key: ext.hello.view
+    name: Hello 조회
+    roles: [SystemAdmin, Operator, Auditor]
+
+# 백엔드 라우트는 /api/extensions/<id> 접두여야 한다.
+routes:
+  - path: /api/extensions/hello/clusters
+    permission: ext.hello.view
+
+backend:
+  enabled: true
+  kind: process

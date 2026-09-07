@@ -4,16 +4,16 @@ package extensionv1_test
 //
 // # 무엇을 지키는가
 //
-// SDK 는 루트에서 떼어낸 독립 모듈이다(sdk/go.mod). 그 이유는 하나다 —
-// **외부 확장 개발자가 SDK 만 쓸 때 CLI/Core 의 의존성이 따라가지 않게** 하기 위해서다.
-// 루트 모듈에는 Kafka 클라이언트·DB 드라이버 3종·Prometheus 가 있고, 앞으로 TUI 라이브러리
-// (Bubble Tea·Bubbles·Lip Gloss 와 그 20여 개 간접 의존)가 들어온다.
+// SDK 는 Core 에서 떼어낸 독립 모듈(`github.com/heartblast/ableops-sdk`)이고,
+// 독립 저장소의 루트가 된다. 그 이유는 하나다 —
+// **외부 확장 개발자가 SDK 만 쓸 때 Core/CLI 의 의존성이 따라가지 않게** 하기 위해서다.
+// Core 모듈에는 Kafka 클라이언트·DB 드라이버 3종·Prometheus·TUI 라이브러리가 있다.
 //
-// 그런데 이 분리는 **한 줄로 무너진다**: 누군가 sdk 안에서 그 패키지들을 import 하고
-// `go mod tidy` 를 돌리면 sdk/go.mod 에 요구가 추가되고, 그 순간 외부 소비자의 모듈 그래프에
+// 그런데 이 분리는 **한 줄로 무너진다**: 누군가 SDK 안에서 그 패키지들을 import 하고
+// `go mod tidy` 를 돌리면 go.mod 에 요구가 추가되고, 그 순간 외부 소비자의 모듈 그래프에
 // 다시 실려 나간다. 컴파일도 테스트도 통과하므로 아무도 알아채지 못한다.
 //
-// ⚠ 이 테스트는 **sdk/go.mod 파일 자체**를 읽는다. import 스캔(imports_test.go)만으로는
+// ⚠ 이 테스트는 **go.mod 파일 자체**를 읽는다. import 스캔(imports_test.go)만으로는
 // 부족하다 — go.mod 의 require 는 import 없이도 손으로 추가될 수 있고,
 // 모듈 그래프에 실리는 것은 import 가 아니라 **require** 이기 때문이다.
 
@@ -24,6 +24,21 @@ import (
 	"strings"
 	"testing"
 )
+
+// ModulePath 는 이 SDK 의 공개 모듈 경로다.
+//
+// ⚠ 바꾸면 외부 Extension 의 import 문이 **전부** 깨진다. 바꿔야 한다면 그것은
+// 새 major(`/v2`)이지 이 상수의 수정이 아니다.
+const sdkModulePath = "github.com/heartblast/ableops-sdk"
+
+// coreModulePaths 는 SDK 가 절대 요구·import 하면 안 되는 **Core 제품 모듈**이다.
+//
+// 과거 경로(kafka-control-portal)와 현재 제품 경로(ableops-kafka)를 함께 막는다 —
+// Core 모듈 경로가 바뀌는 중에도 게이트가 조용히 통과하는 구멍을 만들지 않기 위해서다.
+var coreModulePaths = []string{
+	"github.com/heartblast/ableops-kafka",
+	"github.com/heartblast/kafka-control-portal",
+}
 
 // bannedModulePrefixes 는 SDK 모듈이 절대 요구하면 안 되는 것들이다.
 //
@@ -49,65 +64,96 @@ var bannedModulePrefixes = []string{
 	"github.com/go-ldap/ldap",
 }
 
-// TestSDKModuleRequiresStayMinimal 는 sdk/go.mod 의 require 목록을 고정한다.
+// TestSDKModuleRequiresStayMinimal 는 go.mod 의 require 목록을 고정한다.
 func TestSDKModuleRequiresStayMinimal(t *testing.T) {
 	data := readSDKGoMod(t)
 
 	for _, banned := range bannedModulePrefixes {
 		if strings.Contains(data, banned) {
-			t.Errorf("sdk/go.mod 가 %q 를 요구한다 — 이것이 외부 SDK 소비자의 모듈 그래프에 실려 나간다.\n"+
-				"  SDK 는 확장 개발자에게 필요한 것만 요구해야 한다. CLI/Core 전용 의존은 루트 모듈에 둔다.", banned)
+			t.Errorf("SDK go.mod 가 %q 를 요구한다 — 이것이 외부 SDK 소비자의 모듈 그래프에 실려 나간다.\n"+
+				"  SDK 는 확장 개발자에게 필요한 것만 요구해야 한다. Core/CLI 전용 의존은 Core 모듈에 둔다.", banned)
 		}
 	}
 }
 
-// TestSDKModuleDoesNotRequireRoot 는 SDK 가 루트 모듈을 되끌어오지 않음을 고정한다.
+// TestSDKModuleDoesNotRequireCore 는 SDK 가 Core 제품 모듈을 되끌어오지 않음을 고정한다.
 //
-// ⚠ 이것이 들어오면 분리가 **완전히** 무의미해진다 — 루트를 요구하는 순간 루트의 모든 요구가
-// 소비자의 그래프에 따라 들어오기 때문이다.
-func TestSDKModuleDoesNotRequireRoot(t *testing.T) {
+// ⚠ 이것이 들어오면 분리가 **완전히** 무의미해진다 — Core 를 요구하는 순간 Core 의 모든 요구가
+// 소비자의 그래프에 따라 들어오고, 의존 방향(Core → SDK)이 순환이 된다.
+func TestSDKModuleDoesNotRequireCore(t *testing.T) {
 	data := readSDKGoMod(t)
-	// 자기 자신(.../sdk)은 module 선언에만 나온다. 루트 경로가 require 로 나오면 위반이다.
 	for _, line := range strings.Split(data, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "module ") {
 			continue
 		}
-		if strings.Contains(trimmed, "github.com/heartblast/kafka-control-portal") &&
-			!strings.Contains(trimmed, "kafka-control-portal/sdk") {
-			t.Fatalf("sdk/go.mod 가 루트 모듈을 요구한다 — 분리가 무의미해진다:\n  %s", trimmed)
+		for _, core := range coreModulePaths {
+			if strings.Contains(trimmed, core) {
+				t.Fatalf("SDK go.mod 가 Core 모듈(%s)을 요구한다 — 분리가 무의미해진다:\n  %s", core, trimmed)
+			}
 		}
 	}
 }
 
-// TestSDKModulePathIsNested 는 모듈 경로가 루트의 하위인지 확인한다.
+// TestSDKModulePathIsStandalone 는 모듈 경로가 **독립 저장소 경로**인지 확인한다.
 //
-// 경로가 이것이어야 **import 문이 바뀌지 않는다** — Go 가 최장 일치 모듈 접두로 해소하므로
-// 기존 `.../kafka-control-portal/sdk/extension/v1` 이 그대로 동작한다.
-func TestSDKModulePathIsNested(t *testing.T) {
+// Core 하위 경로(.../kafka-control-portal/sdk)로 되돌아가면 SDK 는 다시 Core 저장소의
+// 태그에 묶이고, 「SDK 와 Core 를 독립 버전으로 릴리스한다」가 성립하지 않는다.
+func TestSDKModulePathIsStandalone(t *testing.T) {
 	data := readSDKGoMod(t)
-	const want = "module github.com/heartblast/kafka-control-portal/sdk"
+	want := "module " + sdkModulePath
 	if !strings.Contains(data, want) {
-		t.Fatalf("sdk/go.mod 의 module 경로가 %q 가 아니다 — 바꾸면 외부 import 문이 전부 깨진다:\n%s",
+		t.Fatalf("SDK go.mod 의 module 경로가 %q 가 아니다 — 바꾸면 외부 import 문이 전부 깨진다:\n%s",
 			want, data)
+	}
+	for _, core := range coreModulePaths {
+		if strings.Contains(data, "module "+core) {
+			t.Fatalf("SDK 모듈 경로가 Core 저장소 하위로 되돌아갔다: %s", core)
+		}
 	}
 }
 
-// readSDKGoMod 는 sdk/go.mod 를 읽는다.
-func readSDKGoMod(t *testing.T) string {
+// sdkModuleRoot 는 이 SDK 모듈의 루트 디렉터리를 찾는다.
+//
+// ⚠ 디렉터리 **이름**으로 찾지 않는다. 이 트리는 두 곳에서 같은 코드로 돌아야 한다:
+//
+//	Core 저장소 안(스테이징)   <core>/sdk/extension/v1/...
+//	독립 저장소(추출 후)        <ableops-sdk>/extension/v1/...
+//
+// 이름("sdk")에 의존하면 추출 직후 모든 테스트가 깨지고, 그것을 고치는 수정이
+// 「추출은 순수 복사여야 한다」는 이 작업의 전제를 무너뜨린다.
+// 그래서 go.mod 의 **module 선언**으로 찾는다 — 두 배치에서 같은 값이다.
+func sdkModuleRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("호출 위치를 알 수 없다")
 	}
-	// <root>/sdk/extension/v1/module_gate_test.go → 2단계 위가 <root>/sdk
-	sdkRoot := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-	data, err := os.ReadFile(filepath.Join(sdkRoot, "go.mod"))
+	dir := filepath.Dir(file)
+	for i := 0; i < 8; i++ {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil && strings.Contains(string(data), "module "+sdkModulePath) {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	t.Fatalf("SDK 모듈 루트(module %s 를 선언한 go.mod)를 찾지 못했다: %s", sdkModulePath, file)
+	return ""
+}
+
+// readSDKGoMod 는 SDK 모듈의 go.mod 를 읽는다.
+func readSDKGoMod(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(sdkModuleRoot(t), "go.mod"))
 	if err != nil {
-		t.Fatalf("sdk/go.mod 를 읽지 못했다: %v", err)
+		t.Fatalf("SDK go.mod 를 읽지 못했다: %v", err)
 	}
 	if len(data) == 0 {
-		t.Fatal("sdk/go.mod 가 비어 있다")
+		t.Fatal("SDK go.mod 가 비어 있다")
 	}
 	return string(data)
 }

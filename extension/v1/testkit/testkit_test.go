@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
-	"github.com/heartblast/kafka-control-portal/sdk/extension/v1/testkit"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
+	"github.com/heartblast/ableops-sdk/extension/v1/testkit"
 )
 
 // TestNewHost_미주입capability는nil 은 최소권한 재현을 고정한다.

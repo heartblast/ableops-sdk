@@ -5,7 +5,7 @@ package testkit
 import (
 	"context"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 // Host 는 조립된 테스트용 실행 컨텍스트다.

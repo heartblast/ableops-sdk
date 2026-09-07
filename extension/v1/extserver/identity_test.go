@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 // TestHeaderValue_한글왕복 은 URL 인코딩 왕복을 고정한다.

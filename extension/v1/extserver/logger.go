@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 // stderrLogger 는 extensionv1.Logger 의 기본 구현이다(한 줄 = 한 이벤트).

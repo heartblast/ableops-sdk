@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	extv1 "github.com/heartblast/kafka-control-portal/sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
 // recordedRequest 는 가짜 Core 가 기록한 요청 1건이다.
