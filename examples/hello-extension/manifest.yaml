@@ -7,7 +7,7 @@ id: hello
 name: Hello Extension
 version: 1.0.0
 description: AbleOps SDK 최소 예제 — 클러스터 목록을 읽어 개수만 돌려준다.
-vendor: AbleOps
+publisher: AbleOps
 
 # 이 확장이 요구하는 Core 버전. 비우면 제한 없음.
 requires:
@@ -21,7 +21,7 @@ capabilities:
 # 권한 키는 반드시 자기 네임스페이스(ext.<id>.<action>)여야 한다.
 permissions:
   - key: ext.hello.view
-    name: Hello 조회
+    label: Hello 조회
     roles: [SystemAdmin, Operator, Auditor]
 
 # 백엔드 라우트는 /api/extensions/<id> 접두여야 한다.
