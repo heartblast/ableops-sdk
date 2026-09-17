@@ -1,12 +1,12 @@
 # AbleOps SDK — 독립 저장소 CI
 #
-# ⚠ 이 파일은 **Core 저장소(ableops-kafka)에서는 아무것도 하지 않는다.** GitHub Actions 는
-#   저장소 **루트**의 .github/workflows 만 읽으므로, Core 안에서 `sdk/.github/workflows/` 는
-#   그냥 텍스트 파일이다. `sdk/` 가 github.com/heartblast/ableops-sdk 로 추출되는 순간
-#   루트가 되어 활성화된다(docs/reference_docs/extension-sdk/12-SDK저장소분리.md §4).
+# 검증 규칙은 scripts/verify.sh 에만 있다. 이 워크플로는 Go 를 설치하고 `verify.sh full` 을 부를 뿐이다 —
+# 로컬 `bash scripts/verify.sh full` 통과가 곧 CI 통과여야 하고, 게이트 목록이 두 곳에 있으면 한쪽이 조용히 어긋난다.
 #
-# ⚠ 여기서 `GOWORK` 를 신경 쓸 필요가 없다 — 추출된 저장소에는 go.work 가 없다.
-#   Core 안에서 이 워크플로를 재현하려면 `cd sdk && GOWORK=off go test ./...` 를 쓴다.
+# ⚠ Core 저장소(ableops-kafka)의 sdk/ 스테이징 안에서는 아무것도 하지 않는다. GitHub Actions 는 저장소 **루트**의
+#   .github/workflows 만 읽으므로, 이 저장소가 루트가 되는 순간 활성화된다
+#   (추출 절차는 Core 저장소의 docs/reference_docs/extension-sdk/12-SDK저장소분리.md §4).
+#   Core 안에서 재현하려면 `cd sdk && GOWORK=off bash scripts/verify.sh full`.
 name: ci
 
 on:
@@ -31,69 +31,8 @@ jobs:
           # Core 와 같은 정확 버전으로 고정한다(자동추종을 버린 교환 — 올릴 때 손으로 올린다).
           go-version: "1.27.1"
           cache: true
-      - name: 의존성 정리
+      # 외부 consumer 검증(TestExternalConsumerCompiles)은 GOPROXY=off 로 모듈 캐시만 쓴다 — 먼저 채워 둔다.
+      - name: 의존성 내려받기
         run: go mod download
-
-      # 포맷은 컴파일 없이 1초 안에 끝난다 — 가장 싼 검사부터.
-      - name: 포맷 검사(gofmt)
-        run: |
-          FILES=$(gofmt -l .)
-          if [ -n "$FILES" ]; then
-            echo "::error::gofmt 미적용 파일이 있습니다."
-            echo "$FILES"
-            exit 1
-          fi
-          echo "gofmt 통과"
-
-      - name: 빌드
-        run: go build ./...
-      - name: 정적분석(go vet)
-        run: go vet ./...
-      - name: 테스트
-        run: go test ./...
-
-      # ⚠ `go test ./...` 가 통과해도 **그 안의 어떤 게이트가 사라졌는지는 알 수 없다.**
-      #   테스트 이름이 바뀌거나 파일이 지워지면 초록불을 유지한 채 경계가 열린다.
-      #   그래서 이 SDK 의 존재 이유에 해당하는 게이트는 **이름으로** 실행·통과를 확인한다.
-      - name: 경계 게이트가 실제로 실행되었는지 확인
-        run: |
-          set -o pipefail
-          go test ./extension/v1 -count=1 -v \
-            -run '^(TestSDKModulePathIsStandalone|TestSDKModuleDoesNotRequireCore|TestSDKModuleRequiresStayMinimal|TestSDKDoesNotImportCore|TestSDKDoesNotImportInternal|TestSDKHasNoUnexpectedDependency|TestSDKDoesNotImportChi|TestPublicAPISnapshot|TestSDKVersionMatchesChangelog|TestSDKVersionIsSemver|TestAPIVersionMatchesModuleMajor|TestExternalConsumerCompiles)$' \
-            2>&1 | tee /tmp/sdk-gates.log
-          for tn in \
-            TestSDKModulePathIsStandalone TestSDKModuleDoesNotRequireCore TestSDKModuleRequiresStayMinimal \
-            TestSDKDoesNotImportCore TestSDKDoesNotImportInternal TestSDKHasNoUnexpectedDependency \
-            TestSDKDoesNotImportChi TestPublicAPISnapshot TestSDKVersionMatchesChangelog \
-            TestSDKVersionIsSemver TestAPIVersionMatchesModuleMajor TestExternalConsumerCompiles; do
-            if ! grep -q -- "--- PASS: $tn" /tmp/sdk-gates.log; then
-              echo "::error::$tn 이(가) 실행·통과되지 않았습니다(-run 미매칭 또는 SKIP). 테스트 이름과 이 목록을 맞추세요."
-              exit 1
-            fi
-          done
-          echo "경계 게이트 12종 전부 실행·통과"
-
-      # 확장 개발자가 가장 먼저 복사해 가는 코드다. 깨진 채로 두면 SDK 의 첫인상이 컴파일 오류가 된다.
-      - name: 예제 확장 빌드
-        run: go build ./examples/...
-
-      # 이 모듈은 확장 개발자에게 **가벼운 것**이 존재 이유다.
-      # 의존이 늘어나면 그 사람의 모듈 그래프와 빌드에 그대로 실려 나간다.
-      #
-      # ⚠ `go list -m all` 을 쓰지 않는다. 그것은 **의존의 테스트 의존**까지 포함해
-      #   gopkg.in/check.v1(yaml.v3 의 테스트용)이 섞여 나오고, 소비자가 실제로 컴파일하는
-      #   것과 다르다. `-deps` + `.Module` 로 「실제로 빌드되는 패키지가 속한 모듈」만 본다
-      #   (표준 라이브러리는 .Module 이 비어 있어 자연히 빠진다 — vendor/golang.org/x/... 를
-      #   외부 의존으로 오인하지 않는다).
-      - name: 의존성 최소성 확인
-        run: |
-          MODS=$(go list -deps -f '{{if .Module}}{{.Module.Path}}{{end}}' ./extension/... | sort -u | sed '/^$/d')
-          echo "빌드에 실제로 들어오는 모듈:"
-          echo "$MODS"
-          UNEXPECTED=$(echo "$MODS" | grep -vE '^(github\.com/heartblast/ableops-sdk|gopkg\.in/yaml\.v3)$' || true)
-          if [ -n "$UNEXPECTED" ]; then
-            echo "::error::허용되지 않은 의존이 빌드에 들어옵니다:"
-            echo "$UNEXPECTED"
-            exit 1
-          fi
-          echo "의존성 최소성 통과(gopkg.in/yaml.v3 하나뿐)"
+      - name: 검증(full) — gofmt · build · vet · test · 경계 게이트 · 예제 빌드 · 의존성 최소성
+        run: bash scripts/verify.sh full
