@@ -1,0 +1,9 @@
+# 에이전트·세션 상태 — 커밋하지 않는다
+.omc/
+.claude/settings.local.json
+
+# Go 빌드·테스트 산출물
+/bin/
+*.test
+*.out
+*.prof
