@@ -3,7 +3,7 @@
 **AbleOps 플랫폼과 Extension 사이의 공개 계약 SDK.**
 
 ```go
-import extensionv1 "github.com/heartblast/ableops-sdk/extension/v1"
+import extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 import "github.com/heartblast/ableops-sdk/extension/v1/extserver"
 ```
 
@@ -69,33 +69,60 @@ Kafka 클라이언트(franz-go) · DB 드라이버(pgx/mysql/go-ora) · Promethe
 package hello
 
 import (
+	"context"
 	"net/http"
+	"time"
 
-	extensionv1 "github.com/heartblast/ableops-sdk/extension/v1"
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
 )
 
-type Extension struct{}
+// PermView 는 조회 권한 키다. 문자열 대신 SDK 로 조립해 ext.<id>.<action> 규칙을 코드로 강제한다.
+var PermView = extv1.PermissionKey("hello", "view")
 
-func (Extension) Manifest() extensionv1.Manifest {
-	return extensionv1.Manifest{
-		APIVersion: extensionv1.APIVersion, // "ableops.io/extension/v1"
-		ID:         "hello",
-		Name:       "Hello Extension",
-		Version:    "1.0.0",
-		Capabilities: []extensionv1.Capability{
-			extensionv1.CapabilityKafkaRead,
-		},
+type Extension struct{ clusters extv1.ClusterRegistry }
+
+// 컴파일 타임 계약 확인 — 메서드 누락을 빌드에서 잡는다.
+var _ extv1.Extension = (*Extension)(nil)
+
+func (e *Extension) Manifest() extv1.Manifest {
+	return extv1.Manifest{
+		APIVersion:   extv1.APIVersion, // "ableops.io/extension/v1"
+		ID:           "hello",
+		Name:         "Hello Extension",
+		Version:      "1.0.0",
+		Capabilities: []extv1.Capability{extv1.CapClusterRead},
+		Permissions:  []extv1.PermissionDecl{{Key: PermView, Label: "Hello 조회"}},
+		Routes:       []extv1.RouteDecl{{Path: "/api/extensions/hello/status", Permission: PermView}},
+		Backend:      extv1.BackendDecl{Enabled: true, Kind: "process"},
 	}
 }
 
-func (Extension) Start(ctx extensionv1.StartContext) error { return nil }
-func (Extension) Stop() error                              { return nil }
+// Start 는 capability 를 주입받는 유일한 지점이다.
+// 선언하지 않은 capability 의 필드는 nil 이다 — RequireX 헬퍼가 그것을 CAPABILITY_UNAVAILABLE 오류로 바꿔 준다.
+func (e *Extension) Start(ctx context.Context, host extv1.HostContext) error {
+	clusters, err := host.RequireClusters()
+	if err != nil {
+		return err
+	}
+	e.clusters = clusters
+	return nil
+}
 
-func (Extension) Routes() []extensionv1.Route {
-	return []extensionv1.Route{{
-		Method:  http.MethodGet,
-		Path:    "/status",
-		Handler: func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"ok":true}`)) },
+func (e *Extension) Stop(context.Context) error { return nil }
+
+func (e *Extension) Health(context.Context) extv1.Health {
+	return extv1.Health{OK: e.clusters != nil, CheckedAt: time.Now()}
+}
+
+// Routes 는 Manifest 의 routes[].path 기준 **상대** 경로를 돌려준다. Core 가 /api/extensions/hello 아래에 마운트한다.
+func (e *Extension) Routes() []extv1.RouteHandler {
+	return []extv1.RouteHandler{{
+		Method:     http.MethodGet,
+		Pattern:    "/status",
+		Permission: PermView,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}),
 	}}
 }
 ```
@@ -145,20 +172,20 @@ func main() {
 Extension 은 Manifest 에 선언한 capability 에 대응하는 서비스**만** 받는다.
 
 ```go
-Capabilities: []extensionv1.Capability{
-	extensionv1.CapabilityKafkaRead,
-	extensionv1.CapabilityWorkflowSubmit,
-	extensionv1.CapabilityAudit,
+Capabilities: []extv1.Capability{
+	extv1.CapKafkaRead,       // "kafka.read"
+	extv1.CapWorkflowSubmit,  // "workflow.submit"
+	extv1.CapAuditWrite,      // "audit.write"
 }
 ```
 
 ```go
-func (e Extension) Start(ctx extensionv1.StartContext) error {
-	if ctx.Host.Kafka == nil {
-		// capability 미선언 = 필드가 nil 이다. 반드시 확인한다.
-		return errors.New("kafka:read capability 가 필요합니다")
+func (e *Extension) Start(ctx context.Context, host extv1.HostContext) error {
+	if host.Kafka == nil {
+		// capability 미선언 = 필드가 nil 이다. 직접 검사하거나 host.RequireKafka() 를 쓴다.
+		return errors.New("kafka.read capability 가 필요합니다")
 	}
-	e.kafka = ctx.Host.Kafka
+	e.kafka = host.Kafka
 	return nil
 }
 ```
@@ -170,21 +197,34 @@ func (e Extension) Start(ctx extensionv1.StartContext) error {
 신청을 올리고 Core 의 승인·정책 검증·감사 경로를 지나야 한다. 이것은 정책이 아니라
 **타입 수준의 제약**이다 — 쓰기 메서드가 SDK 에 존재하지 않는다.
 
-capability 전체 목록은 `extensionv1.AllCapabilities()` 가 돌려준다.
+capability 전체 목록은 `extv1.AllCapabilities()` 가 돌려준다.
 
 ---
 
 ## 6. 테스트 — `testkit`
 
 ```go
-import "github.com/heartblast/ableops-sdk/extension/v1/testkit"
+import (
+	"context"
+	"testing"
+
+	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
+	"github.com/heartblast/ableops-sdk/extension/v1/testkit"
+)
 
 func TestExtension(t *testing.T) {
-	host := testkit.NewHost(testkit.WithKafkaTopics("orders", "payments"))
-	if err := (Extension{}).Start(testkit.StartContext(host)); err != nil {
+	// 옵션으로 주지 않은 capability 는 실제 Core 와 똑같이 nil 이다(testkit 은 관대하지 않다).
+	host := testkit.NewHost("hello",
+		testkit.WithClusters(testkit.NewFakeClusters(extv1.ClusterInfo{ID: "prod-01", Name: "운영", Active: true})),
+	)
+	ext := &Extension{}
+	if err := ext.Start(context.Background(), host.Context()); err != nil {
 		t.Fatal(err)
 	}
-	testkit.AssertManifestValid(t, Extension{}.Manifest())
+	// Manifest · 라우트 · 생애주기 · Health 계약을 한 번에 점검한다. 위반 목록이 비어야 한다.
+	if problems := testkit.CheckExtension(&Extension{}, host.Context()); len(problems) != 0 {
+		t.Fatal(problems)
+	}
 }
 ```
 
@@ -202,7 +242,7 @@ func TestExtension(t *testing.T) {
 | Extension Version | Manifest `version` | 확장 자신의 기능 |
 | **API Version** | `ableops.io/extension/v1` | Go 타입·인터페이스·Manifest 스키마 |
 | **Protocol Version** | `1` | 환경변수·핸드셰이크·헤더·Host API 경로 |
-| **SDK Version** | `extensionv1.SDKVersion` | 이 **모듈**의 릴리스(버그 수정·문서 포함) |
+| **SDK Version** | `extv1.SDKVersion` | 이 **모듈**의 릴리스(버그 수정·문서 포함) |
 
 ### SemVer
 

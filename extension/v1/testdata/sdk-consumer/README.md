@@ -9,7 +9,7 @@
 개발자가 겪을 상황이 재현된다.
 
 - `go.mod` 의 `replace` 가 이 저장소를 가리키므로 로컬 SDK 변경이 즉시 반영된다.
-- 실행은 `sdk/extension/v1/consumer_compile_test.go` 가 임시 디렉터리로 복사해 수행한다.
+- 실행은 `extension/v1/consumer_compile_test.go` 가 임시 디렉터리로 복사해 수행한다.
 - `testdata/` 이므로 저장소 루트의 `go build ./...` 는 이 디렉터리를 보지 않는다.
 
 ⚠ 이 픽스처에 Core 패키지(`internal/…`)를 import 하지 않는다. 그러면 검증이 무의미해진다.

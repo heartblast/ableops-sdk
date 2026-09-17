@@ -5,7 +5,7 @@
 //
 // # 철칙 — internal/ 을 절대 import 하지 않는다
 //
-// `sdk/` 는 `github.com/heartblast/kafka-control-portal/internal/...` 을 어떤 경로로도 import 하지 않는다.
+// 이 모듈은 Core 의 `internal/...`(`github.com/heartblast/ableops-kafka/internal/...`)을 어떤 경로로도 import 하지 않는다.
 // 이유는 두 가지다.
 //
 //  1. Go 의 internal 규칙상 외부 모듈은 `internal/` 을 import 할 수 없다. SDK 가 internal 타입을 노출하면

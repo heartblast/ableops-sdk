@@ -16,10 +16,10 @@ package extensionv1_test
 //
 // # 갱신 방법
 //
-//	UPDATE_SDK_API_GOLDEN=1 go test ./sdk/extension/v1 -run TestPublicAPISnapshot
+//	UPDATE_SDK_API_GOLDEN=1 go test ./extension/v1 -run TestPublicAPISnapshot
 //
 // ⚠ **diff 를 반드시 눈으로 확인한다.** 줄이 사라졌다면 그것은 파괴적 변경이며,
-// v1 을 유지한 채로는 허용되지 않는다(문서 docs/reference_docs/extension-sdk/버전호환정책.md).
+// v1 을 유지한 채로는 허용되지 않는다(.claude/context/불변식.md §2 · Core 저장소의 docs/reference_docs/extension-sdk/버전호환정책.md).
 // 줄이 추가되기만 했다면 하위호환 확장이다 — 단, **인터페이스 안에서의 추가**는 예외적으로
 // 파괴적이다(외부 구현체가 새 메서드를 갖고 있을 리 없다).
 

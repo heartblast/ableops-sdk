@@ -84,5 +84,5 @@
 // # 의존성
 //
 // 이 패키지는 표준 라이브러리와 상위 SDK 패키지(extensionv1)만 사용한다.
-// internal/ · chi · 외부 모듈을 import 하지 않는다(sdk/extension/v1/imports_test.go 가 강제).
+// internal/ · chi · 외부 모듈을 import 하지 않는다(extension/v1/imports_test.go 가 강제).
 package extserver

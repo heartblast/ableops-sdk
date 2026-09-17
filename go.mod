@@ -17,7 +17,7 @@
 // # 저장소
 //
 // 이 디렉터리는 독립 저장소 `github.com/heartblast/ableops-sdk` 의 **루트**가 된다
-// (Core 저장소 안에서는 `sdk/` 에 스테이징된다 — 추출 절차는
+// (Core 저장소 안에서는 `sdk/` 에 스테이징된다 — 추출 절차는 Core 저장소의
 // docs/reference_docs/extension-sdk/12-SDK저장소분리.md).
 // 따라서 이 아래의 경로는 그대로 공개 import 경로다:
 //

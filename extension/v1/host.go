@@ -35,7 +35,7 @@ type Logger interface {
 //	if err != nil { return err }   // "[CAPABILITY_UNAVAILABLE] 확장 기능 sample: kafka.read ..."
 //
 // ⚠ **직접 생성하지 않는다.** 운영 경로에서는 Core 가 만들어 Start 로 넘겨 준다.
-// 테스트에서 필요하면 sdk/extension/v1/testkit 의 testkit.NewHost(...) 를 쓴다 —
+// 테스트에서 필요하면 extension/v1/testkit 의 testkit.NewHost(...) 를 쓴다 —
 // 이 구조체는 v1 이 사는 동안 필드가 **추가**될 수 있고, 그때 unkeyed composite literal
 // (HostContext{a, b, c})은 컴파일이 깨진다. keyed literal 이나 testkit 은 깨지지 않는다.
 type HostContext struct {
