@@ -13,6 +13,10 @@ SDK 공개 API 가 바뀌지 않았다면 Core 릴리스 때문에 여기 항목
 
 ---
 
+## v1.1.1 — 2026-09-28
+
+- Synchronize the concurrent READY handshake test so the Linux race gate can verify the SDK contract.
+
 ## v1.1.0 — 2026-09-28
 
 - Added MCP server and tool discovery and request scoped calls, host managed metric records, and host metadata contracts to `extension/v1`.

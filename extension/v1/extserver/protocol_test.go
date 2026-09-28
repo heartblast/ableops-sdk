@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -149,12 +150,24 @@ func TestRun_프로토콜불일치는INCOMPATIBLE줄을출력(t *testing.T) {
 	}
 }
 
+type lockedBuilder struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (w *lockedBuilder) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.Write(p)
+}
+func (w *lockedBuilder) String() string { w.mu.Lock(); defer w.mu.Unlock(); return w.b.String() }
+
 // TestRun_핸드셰이크에프로토콜정보포함 은 정상 기동 시 새 필드를 채우는지 고정한다.
 func TestRun_핸드셰이크에프로토콜정보포함(t *testing.T) {
 	m := fullEnv()
 	m[EnvProtocolVersion] = "1"
 	m[EnvHostAPIVersion] = "v1"
-	var stdout strings.Builder
+	var stdout lockedBuilder
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
