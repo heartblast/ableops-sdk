@@ -11,6 +11,9 @@ package extserver
 //	GET  /config                              config.read
 //	PUT  /config                              config.write
 //	POST /workflow/topic-create|topic-update|topic-delete|acl-grant|acl-revoke          workflow.submit
+//	GET  /mcp/servers · /mcp/tools?serverId= · POST /mcp/call                           mcp.read · mcp.call
+//	POST /metrics · GET /metadata                                                       metrics.write · host.metadata
+//	POST /secrets/egress                                                                secret.use
 //
 // 응답 본문은 SDK DTO 의 JSON 직렬화 그대로다(extensionv1.TopicInfo 등).
 // 오류는 {"error":"한국어 메시지"} + 상태코드이며, 그 메시지를 그대로 보존해 전달한다
@@ -134,7 +137,12 @@ type hostClient struct {
 	token       string
 	extensionID string
 	http        *http.Client
-	log         extv1.Logger
+	// stream 은 전체 타임아웃이 없는 클라이언트다. 호출 컨텍스트의 기한으로만 끝나는 호출
+	// (mcp.call·secret.use)에 쓴다 — 도구 실행·LLM 스트리밍은 기본 타임아웃보다 길 수 있다.
+	stream *http.Client
+	// timeout 은 호출자가 기한을 주지 않았을 때 stream 호출에 적용하는 기본 기한이다.
+	timeout time.Duration
+	log     extv1.Logger
 	// apiPath 는 상대 경로에 Host API 버전 세그먼트를 붙이는 함수다(env.HostAPIPath).
 	//
 	// 함수로 들고 있는 이유: 구버전 Core 는 버전 없는 경로만 알고, 신버전은 /v1 을 쓴다.
@@ -152,8 +160,12 @@ func newHostClient(env Environment, log extv1.Logger, timeout time.Duration) *ho
 		token:       env.HostToken,
 		extensionID: env.ExtensionID,
 		http:        &http.Client{Timeout: timeout},
-		log:         log,
-		apiPath:     env.HostAPIPath,
+		// 리다이렉트는 따라가지 않는다. secret.use 응답은 상류 응답(3xx 포함)을 그대로 싣으므로,
+		// 따라가면 Host API 요청(Host 토큰 포함)이 상류가 정한 임의 주소로 다시 나간다.
+		stream:  &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		timeout: timeout,
+		log:     log,
+		apiPath: env.HostAPIPath,
 	}
 }
 
@@ -215,7 +227,7 @@ func (c *hostClient) do(ctx context.Context, method, path string, query url.Valu
 			case <-time.After(delay):
 			}
 		}
-		err := c.attempt(ctx, method, endpoint, path, payload, out)
+		err := c.attempt(ctx, c.http, method, endpoint, path, payload, out)
 		if err == nil {
 			return nil
 		}
@@ -236,7 +248,7 @@ func (c *hostClient) versionedPath(path string) string {
 }
 
 // attempt 는 실제 HTTP 요청 1회다.
-func (c *hostClient) attempt(ctx context.Context, method, endpoint, path string, payload []byte, out any) error {
+func (c *hostClient) attempt(ctx context.Context, client *http.Client, method, endpoint, path string, payload []byte, out any) error {
 	var reader io.Reader
 	if payload != nil {
 		reader = bytes.NewReader(payload)
@@ -245,10 +257,75 @@ func (c *hostClient) attempt(ctx context.Context, method, endpoint, path string,
 	if err != nil {
 		return fmt.Errorf("Core Host API 요청을 만들 수 없습니다(%s %s): %w", method, path, err)
 	}
+	c.setHeaders(ctx, req, payload != nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		// url.Error 는 요청 URL 을 포함하지만 토큰은 헤더에만 있으므로 노출되지 않는다.
+		return fmt.Errorf("Core Host API 에 연결하지 못했습니다(%s %s): %w", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	data, readErr := io.ReadAll(io.LimitReader(resp.Body, maxHostResponseBytes))
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return hostErrorFrom(method, path, resp, data)
+	}
+	if readErr != nil {
+		return fmt.Errorf("Core Host API 응답을 읽지 못했습니다(%s %s): %w", method, path, readErr)
+	}
+	if out == nil || resp.StatusCode == http.StatusNoContent || len(bytes.TrimSpace(data)) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("Core Host API 응답을 해석하지 못했습니다(%s %s): %w", method, path, err)
+	}
+	return nil
+}
+
+// hostErrorFrom 은 오류 상태 응답을 HostError 로 만든다.
+func hostErrorFrom(method, path string, resp *http.Response, data []byte) *HostError {
+	msg, code, rid := errorEnvelope(data)
+	if code == "" {
+		// 구버전 Core 는 코드를 보내지 않는다 — 상태코드로 유추한다.
+		code = extv1.CodeForHTTPStatus(resp.StatusCode)
+	}
+	if rid == "" {
+		rid = strings.TrimSpace(resp.Header.Get(HeaderRequestID))
+	}
+	return &HostError{Method: method, Path: path, StatusCode: resp.StatusCode, Message: msg, Code: code, RequestID: rid}
+}
+
+// callContext 는 호출자가 기한을 주지 않았을 때만 기본 기한을 건다.
+//
+// stream 클라이언트에는 전체 타임아웃이 없으므로, 기한 없는 컨텍스트로 부르면 Host 가 응답하지
+// 않을 때 영원히 기다린다. 호출자가 기한을 줬다면 그것이 기본값보다 길어도 그대로 따른다.
+func (c *hostClient) callContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, c.timeout)
+}
+
+// call 은 재시도하지 않는 단발 호출이다(stream 클라이언트 + 호출자 기한).
+func (c *hostClient) call(ctx context.Context, method, path string, body any, out any) error {
+	ctx, cancel := c.callContext(ctx)
+	defer cancel()
+	var payload []byte
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("Core Host API 요청 본문을 만들 수 없습니다(%s %s): %w", method, path, err)
+		}
+		payload = b
+	}
+	return c.attempt(ctx, c.stream, method, c.baseURL+c.versionedPath(path), path, payload, out)
+}
+
+// setHeaders 는 Host API 인증·요청 컨텍스트 헤더를 붙인다.
+func (c *hostClient) setHeaders(ctx context.Context, req *http.Request, hasPayload bool) {
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set(HeaderExtensionID, c.extensionID)
-	if payload != nil {
+	if hasPayload {
 		req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	}
 	// 요청 사용자 컨텍스트 전달(§4).
@@ -279,36 +356,6 @@ func (c *hostClient) attempt(ctx context.Context, method, endpoint, path string,
 	if rid := RequestIDFrom(ctx); rid != "" {
 		req.Header.Set(HeaderRequestID, rid)
 	}
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		// url.Error 는 요청 URL 을 포함하지만 토큰은 헤더에만 있으므로 노출되지 않는다.
-		return fmt.Errorf("Core Host API 에 연결하지 못했습니다(%s %s): %w", method, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	data, readErr := io.ReadAll(io.LimitReader(resp.Body, maxHostResponseBytes))
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		msg, code, rid := errorEnvelope(data)
-		if code == "" {
-			// 구버전 Core 는 코드를 보내지 않는다 — 상태코드로 유추한다.
-			code = extv1.CodeForHTTPStatus(resp.StatusCode)
-		}
-		if rid == "" {
-			rid = strings.TrimSpace(resp.Header.Get(HeaderRequestID))
-		}
-		return &HostError{Method: method, Path: path, StatusCode: resp.StatusCode, Message: msg, Code: code, RequestID: rid}
-	}
-	if readErr != nil {
-		return fmt.Errorf("Core Host API 응답을 읽지 못했습니다(%s %s): %w", method, path, readErr)
-	}
-	if out == nil || resp.StatusCode == http.StatusNoContent || len(bytes.TrimSpace(data)) == 0 {
-		return nil
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		return fmt.Errorf("Core Host API 응답을 해석하지 못했습니다(%s %s): %w", method, path, err)
-	}
-	return nil
 }
 
 // errorEnvelope 는 오류 본문에서 메시지·코드·추적 ID 를 꺼낸다.
@@ -657,13 +704,17 @@ func newHostContext(env Environment, log extv1.Logger, timeout time.Duration) (e
 			"capability", string(extv1.CapSecretRef))
 	}
 	if env.HasCapability(extv1.CapMCPRead) || env.HasCapability(extv1.CapMCPCall) {
-		svc := mcpService{c: client}
+		// mcp.read 만 허용되면 CallMCPTool 은 호출 전에 CAPABILITY_UNAVAILABLE 이다(Host 도 거부한다).
+		svc := mcpService{c: client, canCall: env.HasCapability(extv1.CapMCPCall)}
 		if env.HasCapability(extv1.CapMCPRead) {
 			services[extv1.CapMCPRead] = extv1.MCPService(svc)
 		}
 		if env.HasCapability(extv1.CapMCPCall) {
 			services[extv1.CapMCPCall] = extv1.MCPService(svc)
 		}
+	}
+	if env.HasCapability(extv1.CapSecretUse) {
+		services[extv1.CapSecretUse] = extv1.SecretUseService(secretUseService{c: client})
 	}
 	if env.HasCapability(extv1.CapMetricsWrite) {
 		services[extv1.CapMetricsWrite] = extv1.MetricsService(metricsService{c: client})

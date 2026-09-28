@@ -77,6 +77,7 @@ func AllCapabilities() []Capability {
 		CapMCPCall,
 		CapMetricsWrite,
 		CapHostMetadata,
+		CapSecretUse,
 	}
 }
 
@@ -86,7 +87,7 @@ func AllCapabilities() []Capability {
 func KnownCapability(c Capability) bool {
 	switch c {
 	case CapKafkaRead, CapClusterRead, CapWorkflowSubmit, CapAuditWrite, CapConfigRead, CapConfigWrite, CapSecretRef,
-		CapMCPRead, CapMCPCall, CapMetricsWrite, CapHostMetadata:
+		CapMCPRead, CapMCPCall, CapMetricsWrite, CapHostMetadata, CapSecretUse:
 		return true
 	}
 	return false

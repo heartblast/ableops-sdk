@@ -13,6 +13,23 @@ SDK 공개 API 가 바뀌지 않았다면 Core 릴리스 때문에 여기 항목
 
 ---
 
+## v1.3.0 — 2026-09-28
+
+태그 미생성(릴리스 전). `extension/v1` protocol `1` · Host API `v1` 유지 — 모두 추가만 한 변경이다.
+
+- **secret.use (G4)**: `CapSecretUse`, `SecretUseService.Do`, `SecretTransport`(http.RoundTripper),
+  `SecretEgressRequest`, `SecretEgressOrigin`, `SanitizeSecretEgressHeader`. Host 가 바인딩된 시크릿을
+  허용 origin 의 지정 헤더에만 넣어 대신 호출한다(Host API `POST /v1/secrets/egress`, 상류 응답은
+  `X-Ableops-Egress-Upstream: 1` 과 함께 스트리밍). 평문은 Extension 에 돌아오지 않는다.
+- **MCP 계약 보강 (G1)**: `MCPServer.Description`, `MCPTool.Annotations`(`MCPToolAnnotations`) 추가.
+  process client 는 요청 컨텍스트 없는 MCP 호출을 Host 호출 전에 `PERMISSION_DENIED` 로 막고,
+  `mcp.read` 만 허용된 확장의 `CallMCPTool` 을 `CAPABILITY_UNAVAILABLE` 로 막는다. `CallMCPTool` 은
+  호출 컨텍스트 기한을 따르며(기한 없으면 Host 클라이언트 기본값) 취소를 Host 요청까지 전파한다.
+- **testkit**: `ProcessHost`(Host API v1 테스트 서버 — env 생성·READY·/health·요청 토큰 발급 Invoke·
+  MCP·secret.use·config·audit·metrics·metadata), `FakeSecretUse`, `WithSecretUse`,
+  `AuthorizeRequestIdentity`, `CopyEgressResponse`. `FakeMCP` 에 `Err`·`CallFunc`·`CallHistory`,
+  `WithMCPRead` 는 이제 호출을 거부한다(실제 Host 와 같음).
+
 ## v1.2.0 — 2026-09-28
 
 - READY now includes optional SDK manifest permission keys and required Core version so Hosts can reconcile package runtime metadata with SDK identity, capabilities, permissions, and compatibility.

@@ -20,6 +20,30 @@ Host version, API and protocol versions, extension ID, and granted capabilities.
 The process wire protocol remains `extension/v1`; READY also reports the SDK
 manifest permission keys and required Core version as optional fields.
 
+## v1.3 secret.use and MCP hardening
+
+`secret.use` lets an external-process extension call an API that needs a
+secret (for example an LLM API key) without ever holding the plaintext:
+
+```go
+svc, err := host.RequireSecretUse()
+client := &http.Client{Transport: extensionv1.SecretTransport(svc, extensionv1.SecretRef{Ref: "llm/api-key"})}
+```
+
+The Host resolves the reference only if it is bound to this extension, checks
+the target origin against the binding's allowlist, drops any credential
+headers the extension set, injects the credential into the header the binding
+names, never follows redirects, streams the upstream response back, and audits
+every use without the value. Unbound references are `NOT_FOUND`; other origins
+are `PERMISSION_DENIED`.
+
+MCP process clients now refuse background contexts before contacting the Host,
+refuse `CallMCPTool` unless `mcp.call` is granted, bound `CallMCPTool` by the
+caller's context deadline instead of the Host client default, and propagate
+cancellation to the Host. `testkit.ProcessHost` serves Host API v1 from testkit
+fakes so an extension binary can be tested through its real handshake, route
+proxy, request token, MCP, and secret.use paths.
+
 **AbleOps 플랫폼과 Extension 사이의 공개 계약 SDK.**
 
 ```go

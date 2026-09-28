@@ -77,11 +77,18 @@
   field IncompatibleMessage.APIVersion string `json:"apiVersion,omitempty"`
   field IncompatibleMessage.ProtocolVersion int `json:"protocolVersion,omitempty"`
   field IncompatibleMessage.Reason string `json:"reason"`
+  field MCPServer.Description string `json:"description,omitempty"`
   field MCPServer.ID string `json:"id"`
   field MCPServer.Name string `json:"name,omitempty"`
+  field MCPTool.Annotations *MCPToolAnnotations `json:"annotations,omitempty"`
   field MCPTool.Description string `json:"description,omitempty"`
   field MCPTool.InputSchema json.RawMessage `json:"inputSchema,omitempty"`
   field MCPTool.Name string `json:"name"`
+  field MCPToolAnnotations.DestructiveHint *bool `json:"destructiveHint,omitempty"`
+  field MCPToolAnnotations.IdempotentHint *bool `json:"idempotentHint,omitempty"`
+  field MCPToolAnnotations.OpenWorldHint *bool `json:"openWorldHint,omitempty"`
+  field MCPToolAnnotations.ReadOnlyHint *bool `json:"readOnlyHint,omitempty"`
+  field MCPToolAnnotations.Title string `json:"title,omitempty"`
   field MCPToolCall.Arguments json.RawMessage `json:"arguments,omitempty"`
   field MCPToolCall.Name string `json:"name"`
   field MCPToolCall.ServerID string `json:"serverId"`
@@ -133,6 +140,11 @@
   field RouteHandler.Method string
   field RouteHandler.Pattern string
   field RouteHandler.Permission string
+  field SecretEgressRequest.Body []byte `json:"body,omitempty"`
+  field SecretEgressRequest.Header http.Header `json:"header,omitempty"`
+  field SecretEgressRequest.Method string `json:"method"`
+  field SecretEgressRequest.Ref string `json:"ref"`
+  field SecretEgressRequest.URL string `json:"url"`
   field SecretRef.Ref string `json:"ref"`
   field TopicCreateInput.CleanupPolicy string `json:"cleanupPolicy,omitempty"`
   field TopicCreateInput.ClusterID string `json:"clusterId"`
@@ -187,6 +199,7 @@
   imethod MCPService.ListMCPTools(context.Context, string) ([]MCPTool, error)
   imethod MetricsService.RecordMetric(context.Context, Metric) error
   imethod SecretRefService.Resolve(context.Context, string) (SecretRef, error)
+  imethod SecretUseService.Do(context.Context, SecretRef, *http.Request) (*http.Response, error)
   imethod ServiceResolver.Lookup(Capability) (any, bool)
   imethod WorkflowSubmitService.SubmitACLGrant(context.Context, ACLGrantInput) (RequestRef, error)
   imethod WorkflowSubmitService.SubmitACLRevoke(context.Context, ACLRevokeInput) (RequestRef, error)
@@ -208,6 +221,7 @@ const CapMCPCall Capability
 const CapMCPRead Capability
 const CapMetricsWrite Capability
 const CapSecretRef Capability
+const CapSecretUse Capability
 const CapWorkflowSubmit Capability
 const CodeCapabilityUnavailable ErrorCode
 const CodeConflict ErrorCode
@@ -230,6 +244,7 @@ const FrontendKindTrustedModule
 const HostAPIVersion
 const IncompatiblePrefix
 const MaxProtocolVersion
+const MaxSecretEgressRequestBytes
 const MetricCounter MetricKind
 const MetricDuration MetricKind
 const MigrationRollbackDown
@@ -275,7 +290,10 @@ func PermissionKey(string, string) string
 func ProtocolMismatchReason(int) string
 func RequireService[T any](HostContext, Capability) (T, error)
 func RetryableCode(ErrorCode) bool
+func SanitizeSecretEgressHeader(http.Header, string) http.Header
 func SatisfiesRange(string, string) (bool, error)
+func SecretEgressOrigin(string) (string, error)
+func SecretTransport(SecretUseService, SecretRef) http.RoundTripper
 func SupportsAPIVersion(string) bool
 func SupportsProtocolVersion(int) bool
 func ValidExtensionID(string) bool
@@ -298,6 +316,7 @@ method (HostContext) RequireKafka() (KafkaReadService, error)
 method (HostContext) RequireMCPCall() (MCPService, error)
 method (HostContext) RequireMCPRead() (MCPService, error)
 method (HostContext) RequireMetrics() (MetricsService, error)
+method (HostContext) RequireSecretUse() (SecretUseService, error)
 method (HostContext) RequireSecrets() (SecretRefService, error)
 method (HostContext) RequireWorkflow() (WorkflowSubmitService, error)
 method (Identity) HasPermission(string) bool
@@ -347,6 +366,7 @@ type Logger interface
 type MCPServer struct
 type MCPService interface
 type MCPTool struct
+type MCPToolAnnotations struct
 type MCPToolCall struct
 type MCPToolResult struct
 type Manifest struct
@@ -361,8 +381,10 @@ type RequestRef struct
 type Requires struct
 type RouteDecl struct
 type RouteHandler struct
+type SecretEgressRequest struct
 type SecretRef struct
 type SecretRefService interface
+type SecretUseService interface
 type ServiceMap map[Capability]any
 type ServiceResolver interface
 type ServiceResolverFunc func(capability Capability) (any, bool)
@@ -406,6 +428,7 @@ const EnvHostToken
 const EnvHostURL
 const EnvProtocolVersion
 const HeaderCallToken
+const HeaderEgressUpstream
 const HeaderExtensionID
 const HeaderOnBehalfOf
 const HeaderPermissions
@@ -451,11 +474,17 @@ type ReadyMessage = extv1.ReadyMessage
   field FakeHostMetadata.Value extv1.HostMetadata
   field FakeKafka.Calls []string
   field FakeMCP.Authorize func(context.Context) bool
+  field FakeMCP.CallFunc func(context.Context, extv1.MCPToolCall) (extv1.MCPToolResult, error)
   field FakeMCP.Calls []extv1.MCPToolCall
+  field FakeMCP.Err error
   field FakeMCP.Result extv1.MCPToolResult
   field FakeMCP.Servers []extv1.MCPServer
   field FakeMCP.Tools map[string][]extv1.MCPTool
   field FakeMetrics.Records []extv1.Metric
+  field FakeSecretUse.Bindings map[string]SecretBinding
+  field FakeSecretUse.Err error
+  field FakeSecretUse.Transport http.RoundTripper
+  field FakeSecretUse.Uses []SecretUse
   field FakeWorkflow.FailWith error
   field FakeWorkflow.NextRef extv1.RequestRef
   field FakeWorkflow.Submitted []SubmittedRequest
@@ -464,27 +493,42 @@ type ReadyMessage = extv1.ReadyMessage
   field Host.Config *FakeConfig
   field Host.Kafka *FakeKafka
   field Host.Log *RecordingLogger
+  field Host.SecretUse *FakeSecretUse
   field Host.Secrets *FakeSecrets
   field Host.Workflow *FakeWorkflow
   field RecordingLogger.Lines []string
+  field SecretBinding.Header string
+  field SecretBinding.Origins []string
+  field SecretBinding.Scheme string
+  field SecretBinding.Value string
+  field SecretUse.Code extv1.ErrorCode
+  field SecretUse.Method string
+  field SecretUse.Origin string
+  field SecretUse.Ref string
+  field SecretUse.Status int
   field SubmittedRequest.Input any
   field SubmittedRequest.Kind string
+func AuthorizeRequestIdentity(context.Context) bool
 func CheckExtension(extv1.Extension, extv1.HostContext) []string
 func CheckHealth(extv1.Extension) []string
 func CheckLifecycle(extv1.Extension, extv1.HostContext) []string
 func CheckManifest(extv1.Manifest) []string
 func CheckRoutes(extv1.Extension) []string
+func CopyEgressResponse(http.ResponseWriter, *http.Response)
 func NewFakeAudit() *FakeAudit
 func NewFakeClusters(...extv1.ClusterInfo) *FakeClusters
 func NewFakeConfig(map[string]any) *FakeConfig
 func NewFakeKafka() *FakeKafka
+func NewFakeSecretUse() *FakeSecretUse
 func NewFakeSecrets(...string) *FakeSecrets
 func NewFakeWorkflow() *FakeWorkflow
 func NewHost(string, ...Option) *Host
+func NewProcessHost(*Host, ...ProcessOption) *ProcessHost
 func NewRecordingLogger() *RecordingLogger
 func WithAudit(*FakeAudit) Option
 func WithClusters(*FakeClusters) Option
 func WithConfig(map[string]any) Option
+func WithGrantedCapabilities(...extv1.Capability) ProcessOption
 func WithHostMetadata(FakeHostMetadata) Option
 func WithIdentity(extv1.Identity) Option
 func WithIdentityFunc(func(context.Context) (extv1.Identity, bool)) Option
@@ -493,6 +537,8 @@ func WithLogger(*RecordingLogger) Option
 func WithMCPCall(*FakeMCP) Option
 func WithMCPRead(*FakeMCP) Option
 func WithMetrics(*FakeMetrics) Option
+func WithProcessVersion(string) ProcessOption
+func WithSecretUse(*FakeSecretUse) Option
 func WithSecrets(...string) Option
 func WithService(extv1.Capability, any) Option
 func WithWorkflow(*FakeWorkflow) Option
@@ -512,10 +558,14 @@ method (*FakeKafka) WithACLs(string, ...extv1.ACLEntry) *FakeKafka
 method (*FakeKafka) WithConsumerGroups(string, ...extv1.ConsumerGroupInfo) *FakeKafka
 method (*FakeKafka) WithTopicDetail(string, string, extv1.TopicDetail) *FakeKafka
 method (*FakeKafka) WithTopics(string, ...extv1.TopicInfo) *FakeKafka
+method (*FakeMCP) CallHistory() []extv1.MCPToolCall
 method (*FakeMCP) CallMCPTool(context.Context, extv1.MCPToolCall) (extv1.MCPToolResult, error)
 method (*FakeMCP) ListMCPServers(context.Context) ([]extv1.MCPServer, error)
 method (*FakeMCP) ListMCPTools(context.Context, string) ([]extv1.MCPTool, error)
 method (*FakeMetrics) RecordMetric(context.Context, extv1.Metric) error
+method (*FakeSecretUse) Bind(string, SecretBinding) *FakeSecretUse
+method (*FakeSecretUse) Do(context.Context, extv1.SecretRef, *http.Request) (*http.Response, error)
+method (*FakeSecretUse) History() []SecretUse
 method (*FakeSecrets) Resolve(context.Context, string) (extv1.SecretRef, error)
 method (*FakeWorkflow) SubmitACLGrant(context.Context, extv1.ACLGrantInput) (extv1.RequestRef, error)
 method (*FakeWorkflow) SubmitACLRevoke(context.Context, extv1.ACLRevokeInput) (extv1.RequestRef, error)
@@ -523,6 +573,15 @@ method (*FakeWorkflow) SubmitTopicCreate(context.Context, extv1.TopicCreateInput
 method (*FakeWorkflow) SubmitTopicDelete(context.Context, extv1.TopicDeleteInput) (extv1.RequestRef, error)
 method (*FakeWorkflow) SubmitTopicUpdate(context.Context, extv1.TopicUpdateInput) (extv1.RequestRef, error)
 method (*Host) Context() extv1.HostContext
+method (*ProcessHost) Close()
+method (*ProcessHost) Denials() []string
+method (*ProcessHost) Env() []string
+method (*ProcessHost) Granted() []extv1.Capability
+method (*ProcessHost) Health(context.Context) (int, extv1.Health, error)
+method (*ProcessHost) Invoke(context.Context, extv1.Identity, string, string, []byte) (int, []byte, error)
+method (*ProcessHost) Launch(context.Context, *exec.Cmd) (extv1.ReadyMessage, io.WriteCloser, error)
+method (*ProcessHost) URL() string
+method (*ProcessHost) WaitReady(context.Context, io.Reader) (extv1.ReadyMessage, error)
 method (*RecordingLogger) Contains(string) bool
 method (*RecordingLogger) Error(string, ...any)
 method (*RecordingLogger) Info(string, ...any)
@@ -535,10 +594,15 @@ type FakeHostMetadata struct
 type FakeKafka struct
 type FakeMCP struct
 type FakeMetrics struct
+type FakeSecretUse struct
 type FakeSecrets struct
 type FakeWorkflow struct
 type Host struct
 type Option func(*Host)
+type ProcessHost struct
+type ProcessOption func(*ProcessHost)
 type RecordingLogger struct
+type SecretBinding struct
+type SecretUse struct
 type SubmittedRequest struct
 

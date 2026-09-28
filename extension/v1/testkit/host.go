@@ -23,11 +23,15 @@ type Host struct {
 	Audit    *FakeAudit
 	Config   *FakeConfig
 	Secrets  *FakeSecrets
+	// SecretUse 는 WithSecretUse 로 주입한 secret.use 가짜 구현이다(미주입이면 nil).
+	SecretUse *FakeSecretUse
 	// Log 는 기록형 로거다(항상 주입된다 — 시크릿 유출 검증에 쓴다).
 	Log *RecordingLogger
 
 	// extra 는 WithService 로 추가된 임의 capability 서비스다.
 	extra []serviceEntry
+	// mcpCall 은 WithMCPCall 로 준 FakeMCP 다. mcp.call 을 허용한 Host 는 조회도 같은 서비스로 한다.
+	mcpCall *FakeMCP
 }
 
 // Context 는 확장의 Start 에 넘길 HostContext 를 돌려준다.
@@ -86,6 +90,9 @@ func (h *Host) buildResolver() extv1.ServiceResolver {
 	// 마지막에 적용해 명시적 주입이 기본 조립을 이기게 한다.
 	for _, e := range h.extra {
 		services[e.capability] = e.svc
+	}
+	if _, ok := services[extv1.CapMCPRead]; ok && h.mcpCall != nil {
+		services[extv1.CapMCPRead] = extv1.MCPService(h.mcpCall)
 	}
 	return services
 }

@@ -5,8 +5,8 @@ package extensionv1
 import "testing"
 
 func TestKnownCapability(t *testing.T) {
-	if len(AllCapabilities()) != 11 {
-		t.Fatalf("capability 는 11종이어야 한다: %d종", len(AllCapabilities()))
+	if len(AllCapabilities()) != 12 {
+		t.Fatalf("capability 는 12종이어야 한다: %d종", len(AllCapabilities()))
 	}
 	for _, c := range AllCapabilities() {
 		if !KnownCapability(c) {
