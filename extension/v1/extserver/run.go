@@ -262,7 +262,7 @@ func RunContext(ctx context.Context, ext extv1.Extension, opts ...Option) error 
 
 	// 8) 기동 핸드셰이크 — **리스닝을 시작한 뒤에만** 출력한다.
 	//    Core 는 이 줄을 보는 즉시 프록시를 시작하므로, 먼저 출력하면 첫 요청이 연결 거부된다.
-	if err := writeHandshake(o.stdout, ln.Addr().String(), env); err != nil {
+	if err := writeHandshake(o.stdout, ln.Addr().String(), env, manifest); err != nil {
 		shutdown(srv, o.shutdownTimeout)
 		return err
 	}
@@ -360,12 +360,19 @@ func checkLoopback(addr net.Addr) error {
 //
 // 프로토콜 1의 원래 필드(addr·version)는 그대로 채우고 apiVersion·protocolVersion 을 **추가**한다.
 // 구버전 Core 는 모르는 필드를 무시하므로 하위호환이 유지된다.
-func writeHandshake(w io.Writer, addr string, env Environment) error {
+func writeHandshake(w io.Writer, addr string, env Environment, manifest extv1.Manifest) error {
+	requested := make([]string, 0, len(manifest.Capabilities))
+	for _, c := range manifest.Capabilities {
+		requested = append(requested, string(c))
+	}
 	body, err := json.Marshal(ReadyMessage{
-		Addr:            addr,
-		Version:         env.Version,
-		APIVersion:      extv1.APIVersion,
-		ProtocolVersion: extv1.ProtocolVersion,
+		SDKVersion:            "v" + extv1.SDKVersion,
+		ManifestID:            manifest.ID,
+		RequestedCapabilities: strings.Join(requested, ","),
+		Addr:                  addr,
+		Version:               env.Version,
+		APIVersion:            extv1.APIVersion,
+		ProtocolVersion:       extv1.ProtocolVersion,
 	})
 	if err != nil {
 		return fmt.Errorf("기동 핸드셰이크 메시지를 만들 수 없습니다: %w", err)

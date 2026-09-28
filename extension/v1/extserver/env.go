@@ -108,6 +108,10 @@ var processCapabilityClients = map[extv1.Capability]bool{
 	extv1.CapAuditWrite:     true,
 	extv1.CapConfigRead:     true,
 	extv1.CapConfigWrite:    true,
+	extv1.CapMCPRead:        true,
+	extv1.CapMCPCall:        true,
+	extv1.CapMetricsWrite:   true,
+	extv1.CapHostMetadata:   true,
 	// secret.ref 는 외부 프로세스 Host 프로토콜에 경로가 없다(hostclient.go 참조).
 	extv1.CapSecretRef: false,
 }

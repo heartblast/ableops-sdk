@@ -656,6 +656,21 @@ func newHostContext(env Environment, log extv1.Logger, timeout time.Duration) (e
 		log.Warn("secret.ref 는 외부 프로세스 Extension 에서 아직 제공되지 않습니다(Host API 경로 미정의)",
 			"capability", string(extv1.CapSecretRef))
 	}
+	if env.HasCapability(extv1.CapMCPRead) || env.HasCapability(extv1.CapMCPCall) {
+		svc := mcpService{c: client}
+		if env.HasCapability(extv1.CapMCPRead) {
+			services[extv1.CapMCPRead] = extv1.MCPService(svc)
+		}
+		if env.HasCapability(extv1.CapMCPCall) {
+			services[extv1.CapMCPCall] = extv1.MCPService(svc)
+		}
+	}
+	if env.HasCapability(extv1.CapMetricsWrite) {
+		services[extv1.CapMetricsWrite] = extv1.MetricsService(metricsService{c: client})
+	}
+	if env.HasCapability(extv1.CapHostMetadata) {
+		services[extv1.CapHostMetadata] = extv1.HostMetadataService(metadataService{c: client})
+	}
 	host.Services = services
 	return host, client
 }

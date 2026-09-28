@@ -13,6 +13,12 @@ SDK 공개 API 가 바뀌지 않았다면 Core 릴리스 때문에 여기 항목
 
 ---
 
+## v1.1.0 — 2026-09-28
+
+- Added MCP server and tool discovery and request scoped calls, host managed metric records, and host metadata contracts to `extension/v1`.
+- Added process Host API clients and testkit fakes for these contracts. The `extension/v1` protocol version remains 1; the READY message now optionally reports the SDK and requested manifest capabilities.
+- Existing SDK v1 extensions and Host implementations retain their original method and wire contracts.
+
 ## v1.0.0 — 2026-09-07
 
 **AbleOps Core 저장소에서 분리된 첫 독립 릴리스.**

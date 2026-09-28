@@ -73,6 +73,10 @@ func AllCapabilities() []Capability {
 		CapConfigRead,
 		CapConfigWrite,
 		CapSecretRef,
+		CapMCPRead,
+		CapMCPCall,
+		CapMetricsWrite,
+		CapHostMetadata,
 	}
 }
 
@@ -81,11 +85,19 @@ func AllCapabilities() []Capability {
 // Extension 이 런타임에 nil 역참조로 죽는다.
 func KnownCapability(c Capability) bool {
 	switch c {
-	case CapKafkaRead, CapClusterRead, CapWorkflowSubmit, CapAuditWrite, CapConfigRead, CapConfigWrite, CapSecretRef:
+	case CapKafkaRead, CapClusterRead, CapWorkflowSubmit, CapAuditWrite, CapConfigRead, CapConfigWrite, CapSecretRef,
+		CapMCPRead, CapMCPCall, CapMetricsWrite, CapHostMetadata:
 		return true
 	}
 	return false
 }
+
+const (
+	CapMCPRead      Capability = "mcp.read"
+	CapMCPCall      Capability = "mcp.call"
+	CapMetricsWrite Capability = "metrics.write"
+	CapHostMetadata Capability = "host.metadata"
+)
 
 // HasCapability 는 Manifest 가 해당 capability 를 선언했는지 확인한다.
 func (m Manifest) HasCapability(c Capability) bool {

@@ -1,5 +1,24 @@
 # AbleOps SDK
 
+## v1.1 Host services
+
+`extension/v1` adds `mcp.read`, `mcp.call`, `metrics.write`, and
+`host.metadata` capabilities. Declare them in the SDK manifest and request
+only the services needed through `HostContext.RequireMCPRead`,
+`RequireMCPCall`, `RequireMetrics`, or `RequireHostMetadata`.
+
+MCP discovery and calls use the request context passed to an extension route.
+The Host binds its authenticated principal to an opaque, short lived request
+token. Background contexts have no principal and the Host rejects MCP calls.
+The extension must not construct identity or request token headers itself.
+The Host applies its existing MCP grants, policy, executor, and audit path.
+
+`MetricsService.RecordMetric` accepts a counter increment or duration sample.
+The Host owns its registry and limits metric names and labels. The SDK does not
+expose a Prometheus registry or endpoint. `HostMetadataService` reports the
+Host version, API and protocol versions, extension ID, and granted capabilities.
+The process wire protocol remains `extension/v1`; the READY fields are additive.
+
 **AbleOps 플랫폼과 Extension 사이의 공개 계약 SDK.**
 
 ```go

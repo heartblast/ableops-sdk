@@ -63,6 +63,11 @@
   field HostContext.Secrets SecretRefService
   field HostContext.Services ServiceResolver
   field HostContext.Workflow WorkflowSubmitService
+  field HostMetadata.APIVersion string `json:"apiVersion"`
+  field HostMetadata.ExtensionID string `json:"extensionId"`
+  field HostMetadata.GrantedCapabilities []Capability `json:"grantedCapabilities"`
+  field HostMetadata.HostVersion string `json:"hostVersion"`
+  field HostMetadata.ProtocolVersion int `json:"protocolVersion"`
   field Identity.Department string `json:"department"`
   field Identity.Name string `json:"name"`
   field Identity.Permissions []string `json:"permissions,omitempty"`
@@ -72,6 +77,17 @@
   field IncompatibleMessage.APIVersion string `json:"apiVersion,omitempty"`
   field IncompatibleMessage.ProtocolVersion int `json:"protocolVersion,omitempty"`
   field IncompatibleMessage.Reason string `json:"reason"`
+  field MCPServer.ID string `json:"id"`
+  field MCPServer.Name string `json:"name,omitempty"`
+  field MCPTool.Description string `json:"description,omitempty"`
+  field MCPTool.InputSchema json.RawMessage `json:"inputSchema,omitempty"`
+  field MCPTool.Name string `json:"name"`
+  field MCPToolCall.Arguments json.RawMessage `json:"arguments,omitempty"`
+  field MCPToolCall.Name string `json:"name"`
+  field MCPToolCall.ServerID string `json:"serverId"`
+  field MCPToolResult.Content json.RawMessage `json:"content,omitempty"`
+  field MCPToolResult.IsError bool `json:"isError"`
+  field MCPToolResult.StructuredContent json.RawMessage `json:"structuredContent,omitempty"`
   field Manifest.APIVersion string `json:"apiVersion" yaml:"apiVersion"`
   field Manifest.Backend BackendDecl `json:"backend,omitempty" yaml:"backend,omitempty"`
   field Manifest.Capabilities []Capability `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
@@ -92,13 +108,19 @@
   field MenuDecl.Parent string `json:"parent,omitempty" yaml:"parent,omitempty"`
   field MenuDecl.Path string `json:"path" yaml:"path"`
   field MenuDecl.Permission string `json:"permission,omitempty" yaml:"permission,omitempty"`
+  field Metric.Kind MetricKind `json:"kind"`
+  field Metric.Name string `json:"name"`
+  field Metric.Value float64 `json:"value"`
   field MigrationsDecl.Rollback string `json:"rollback,omitempty" yaml:"rollback,omitempty"`
   field PermissionDecl.Key string `json:"key" yaml:"key"`
   field PermissionDecl.Label string `json:"label" yaml:"label"`
   field PermissionDecl.Roles []string `json:"roles,omitempty" yaml:"roles,omitempty"`
   field ReadyMessage.APIVersion string `json:"apiVersion,omitempty"`
   field ReadyMessage.Addr string `json:"addr"`
+  field ReadyMessage.ManifestID string `json:"manifestId,omitempty"`
   field ReadyMessage.ProtocolVersion int `json:"protocolVersion,omitempty"`
+  field ReadyMessage.RequestedCapabilities string `json:"requestedCapabilities,omitempty"`
+  field ReadyMessage.SDKVersion string `json:"sdkVersion,omitempty"`
   field ReadyMessage.Version string `json:"version,omitempty"`
   field RequestRef.ID string `json:"requestId"`
   field RequestRef.State string `json:"state"`
@@ -150,6 +172,7 @@
   imethod Extension.Routes() []RouteHandler
   imethod Extension.Start(context.Context, HostContext) error
   imethod Extension.Stop(context.Context) error
+  imethod HostMetadataService.GetHostMetadata(context.Context) (HostMetadata, error)
   imethod KafkaReadService.DescribeTopic(context.Context, string, string) (TopicDetail, error)
   imethod KafkaReadService.ListACLs(context.Context, string, ACLFilter) ([]ACLEntry, error)
   imethod KafkaReadService.ListConsumerGroups(context.Context, string) ([]ConsumerGroupInfo, error)
@@ -157,6 +180,10 @@
   imethod Logger.Error(string, ...any)
   imethod Logger.Info(string, ...any)
   imethod Logger.Warn(string, ...any)
+  imethod MCPService.CallMCPTool(context.Context, MCPToolCall) (MCPToolResult, error)
+  imethod MCPService.ListMCPServers(context.Context) ([]MCPServer, error)
+  imethod MCPService.ListMCPTools(context.Context, string) ([]MCPTool, error)
+  imethod MetricsService.RecordMetric(context.Context, Metric) error
   imethod SecretRefService.Resolve(context.Context, string) (SecretRef, error)
   imethod ServiceResolver.Lookup(Capability) (any, bool)
   imethod WorkflowSubmitService.SubmitACLGrant(context.Context, ACLGrantInput) (RequestRef, error)
@@ -173,7 +200,11 @@ const CapAuditWrite Capability
 const CapClusterRead Capability
 const CapConfigRead Capability
 const CapConfigWrite Capability
+const CapHostMetadata Capability
 const CapKafkaRead Capability
+const CapMCPCall Capability
+const CapMCPRead Capability
+const CapMetricsWrite Capability
 const CapSecretRef Capability
 const CapWorkflowSubmit Capability
 const CodeCapabilityUnavailable ErrorCode
@@ -197,6 +228,8 @@ const FrontendKindTrustedModule
 const HostAPIVersion
 const IncompatiblePrefix
 const MaxProtocolVersion
+const MetricCounter MetricKind
+const MetricDuration MetricKind
 const MigrationRollbackDown
 const MigrationRollbackNone
 const MinProtocolVersion
@@ -257,8 +290,12 @@ method (HostContext) RequireAudit() (AuditService, error)
 method (HostContext) RequireClusters() (ClusterRegistry, error)
 method (HostContext) RequireConfig() (ConfigService, error)
 method (HostContext) RequireConfigWrite() (ConfigWriteService, error)
+method (HostContext) RequireHostMetadata() (HostMetadataService, error)
 method (HostContext) RequireIdentity(context.Context) (Identity, error)
 method (HostContext) RequireKafka() (KafkaReadService, error)
+method (HostContext) RequireMCPCall() (MCPService, error)
+method (HostContext) RequireMCPRead() (MCPService, error)
+method (HostContext) RequireMetrics() (MetricsService, error)
 method (HostContext) RequireSecrets() (SecretRefService, error)
 method (HostContext) RequireWorkflow() (WorkflowSubmitService, error)
 method (Identity) HasPermission(string) bool
@@ -298,13 +335,23 @@ type Extension interface
 type FrontendDecl struct
 type Health struct
 type HostContext struct
+type HostMetadata struct
+type HostMetadataService interface
 type Identity struct
 type IncompatibleMessage struct
 type InstallPhase string
 type KafkaReadService interface
 type Logger interface
+type MCPServer struct
+type MCPService interface
+type MCPTool struct
+type MCPToolCall struct
+type MCPToolResult struct
 type Manifest struct
 type MenuDecl struct
+type Metric struct
+type MetricKind string
+type MetricsService interface
 type MigrationsDecl struct
 type PermissionDecl struct
 type ReadyMessage struct
@@ -399,7 +446,14 @@ type ReadyMessage = extv1.ReadyMessage
 # package testkit (extension/v1/testkit)
   field FakeAudit.Entries []extv1.AuditEntry
   field FakeConfig.Writes []map[string]any
+  field FakeHostMetadata.Value extv1.HostMetadata
   field FakeKafka.Calls []string
+  field FakeMCP.Authorize func(context.Context) bool
+  field FakeMCP.Calls []extv1.MCPToolCall
+  field FakeMCP.Result extv1.MCPToolResult
+  field FakeMCP.Servers []extv1.MCPServer
+  field FakeMCP.Tools map[string][]extv1.MCPTool
+  field FakeMetrics.Records []extv1.Metric
   field FakeWorkflow.FailWith error
   field FakeWorkflow.NextRef extv1.RequestRef
   field FakeWorkflow.Submitted []SubmittedRequest
@@ -429,10 +483,14 @@ func NewRecordingLogger() *RecordingLogger
 func WithAudit(*FakeAudit) Option
 func WithClusters(*FakeClusters) Option
 func WithConfig(map[string]any) Option
+func WithHostMetadata(FakeHostMetadata) Option
 func WithIdentity(extv1.Identity) Option
 func WithIdentityFunc(func(context.Context) (extv1.Identity, bool)) Option
 func WithKafka(*FakeKafka) Option
 func WithLogger(*RecordingLogger) Option
+func WithMCPCall(*FakeMCP) Option
+func WithMCPRead(*FakeMCP) Option
+func WithMetrics(*FakeMetrics) Option
 func WithSecrets(...string) Option
 func WithService(extv1.Capability, any) Option
 func WithWorkflow(*FakeWorkflow) Option
@@ -452,6 +510,10 @@ method (*FakeKafka) WithACLs(string, ...extv1.ACLEntry) *FakeKafka
 method (*FakeKafka) WithConsumerGroups(string, ...extv1.ConsumerGroupInfo) *FakeKafka
 method (*FakeKafka) WithTopicDetail(string, string, extv1.TopicDetail) *FakeKafka
 method (*FakeKafka) WithTopics(string, ...extv1.TopicInfo) *FakeKafka
+method (*FakeMCP) CallMCPTool(context.Context, extv1.MCPToolCall) (extv1.MCPToolResult, error)
+method (*FakeMCP) ListMCPServers(context.Context) ([]extv1.MCPServer, error)
+method (*FakeMCP) ListMCPTools(context.Context, string) ([]extv1.MCPTool, error)
+method (*FakeMetrics) RecordMetric(context.Context, extv1.Metric) error
 method (*FakeSecrets) Resolve(context.Context, string) (extv1.SecretRef, error)
 method (*FakeWorkflow) SubmitACLGrant(context.Context, extv1.ACLGrantInput) (extv1.RequestRef, error)
 method (*FakeWorkflow) SubmitACLRevoke(context.Context, extv1.ACLRevokeInput) (extv1.RequestRef, error)
@@ -463,10 +525,14 @@ method (*RecordingLogger) Contains(string) bool
 method (*RecordingLogger) Error(string, ...any)
 method (*RecordingLogger) Info(string, ...any)
 method (*RecordingLogger) Warn(string, ...any)
+method (FakeHostMetadata) GetHostMetadata(context.Context) (extv1.HostMetadata, error)
 type FakeAudit struct
 type FakeClusters struct
 type FakeConfig struct
+type FakeHostMetadata struct
 type FakeKafka struct
+type FakeMCP struct
+type FakeMetrics struct
 type FakeSecrets struct
 type FakeWorkflow struct
 type Host struct

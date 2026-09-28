@@ -69,6 +69,9 @@ const IncompatiblePrefix = "ABLEOPS_EXT_INCOMPATIBLE"
 // ⚠ 필드는 **추가만** 한다. 구버전 Core 는 모르는 필드를 무시하고, 구버전 확장은 새 필드를
 // 보내지 않으므로 양방향 하위호환이 성립한다.
 type ReadyMessage struct {
+	SDKVersion            string `json:"sdkVersion,omitempty"`
+	ManifestID            string `json:"manifestId,omitempty"`
+	RequestedCapabilities string `json:"requestedCapabilities,omitempty"`
 	// Addr 는 실제 리스닝 주소다(항상 루프백 — Core 가 검증한다).
 	Addr string `json:"addr"`
 	// Version 은 실행 중인 확장 버전이다(프로토콜 1의 원래 필드 — 계속 채운다).
