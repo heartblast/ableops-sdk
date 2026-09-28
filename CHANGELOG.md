@@ -13,6 +13,10 @@ SDK 공개 API 가 바뀌지 않았다면 Core 릴리스 때문에 여기 항목
 
 ---
 
+## v1.2.0 — 2026-09-28
+
+- READY now includes optional SDK manifest permission keys and required Core version so Hosts can reconcile package runtime metadata with SDK identity, capabilities, permissions, and compatibility.
+
 ## v1.1.1 — 2026-09-28
 
 - Synchronize the concurrent READY handshake test so the Linux race gate can verify the SDK contract.

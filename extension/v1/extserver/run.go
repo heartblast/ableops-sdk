@@ -365,10 +365,16 @@ func writeHandshake(w io.Writer, addr string, env Environment, manifest extv1.Ma
 	for _, c := range manifest.Capabilities {
 		requested = append(requested, string(c))
 	}
+	permissions := make([]string, 0, len(manifest.Permissions))
+	for _, p := range manifest.Permissions {
+		permissions = append(permissions, p.Key)
+	}
 	body, err := json.Marshal(ReadyMessage{
 		SDKVersion:            "v" + extv1.SDKVersion,
 		ManifestID:            manifest.ID,
 		RequestedCapabilities: strings.Join(requested, ","),
+		ManifestPermissions:   strings.Join(permissions, ","),
+		RequiredCoreVersion:   manifest.Requires.Core,
 		Addr:                  addr,
 		Version:               env.Version,
 		APIVersion:            extv1.APIVersion,

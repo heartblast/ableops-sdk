@@ -1,6 +1,6 @@
 # AbleOps SDK
 
-## v1.1 Host services
+## v1.2 Host services
 
 `extension/v1` adds `mcp.read`, `mcp.call`, `metrics.write`, and
 `host.metadata` capabilities. Declare them in the SDK manifest and request
@@ -17,7 +17,8 @@ The Host applies its existing MCP grants, policy, executor, and audit path.
 The Host owns its registry and limits metric names and labels. The SDK does not
 expose a Prometheus registry or endpoint. `HostMetadataService` reports the
 Host version, API and protocol versions, extension ID, and granted capabilities.
-The process wire protocol remains `extension/v1`; the READY fields are additive.
+The process wire protocol remains `extension/v1`; READY also reports the SDK
+manifest permission keys and required Core version as optional fields.
 
 **AbleOps 플랫폼과 Extension 사이의 공개 계약 SDK.**
 

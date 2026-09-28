@@ -33,4 +33,4 @@ package extensionv1
 //	Patch  호환 버그 수정 — 공개 심볼 변화 없음
 //	Minor  하위 호환 API 추가 — 골든(testdata/api-v1.golden)에 줄이 **추가만** 된다
 //	Major  Breaking Change — v1 에서는 금지다. 새 API 버전(extension/v2)을 만든다
-const SDKVersion = "1.1.1"
+const SDKVersion = "1.2.0"

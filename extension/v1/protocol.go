@@ -72,6 +72,8 @@ type ReadyMessage struct {
 	SDKVersion            string `json:"sdkVersion,omitempty"`
 	ManifestID            string `json:"manifestId,omitempty"`
 	RequestedCapabilities string `json:"requestedCapabilities,omitempty"`
+	ManifestPermissions   string `json:"manifestPermissions,omitempty"`
+	RequiredCoreVersion   string `json:"requiredCoreVersion,omitempty"`
 	// Addr 는 실제 리스닝 주소다(항상 루프백 — Core 가 검증한다).
 	Addr string `json:"addr"`
 	// Version 은 실행 중인 확장 버전이다(프로토콜 1의 원래 필드 — 계속 채운다).

@@ -118,8 +118,10 @@
   field ReadyMessage.APIVersion string `json:"apiVersion,omitempty"`
   field ReadyMessage.Addr string `json:"addr"`
   field ReadyMessage.ManifestID string `json:"manifestId,omitempty"`
+  field ReadyMessage.ManifestPermissions string `json:"manifestPermissions,omitempty"`
   field ReadyMessage.ProtocolVersion int `json:"protocolVersion,omitempty"`
   field ReadyMessage.RequestedCapabilities string `json:"requestedCapabilities,omitempty"`
+  field ReadyMessage.RequiredCoreVersion string `json:"requiredCoreVersion,omitempty"`
   field ReadyMessage.SDKVersion string `json:"sdkVersion,omitempty"`
   field ReadyMessage.Version string `json:"version,omitempty"`
   field RequestRef.ID string `json:"requestId"`

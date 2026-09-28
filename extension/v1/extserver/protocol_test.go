@@ -203,6 +203,23 @@ func TestRun_핸드셰이크에프로토콜정보포함(t *testing.T) {
 	}
 }
 
+func TestReadyIncludesSDKManifestDescriptor(t *testing.T) {
+	m := testManifest(extv1.CapMCPRead)
+	m.Permissions = []extv1.PermissionDecl{{Key: extv1.PermissionKey(m.ID, "view"), Label: "View"}}
+	m.Requires.Core = ">=0.4.0"
+	var out strings.Builder
+	if err := writeHandshake(&out, "127.0.0.1:1234", Environment{Version: m.Version}, m); err != nil {
+		t.Fatal(err)
+	}
+	var ready ReadyMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(out.String(), extv1.ReadyPrefix))), &ready); err != nil {
+		t.Fatal(err)
+	}
+	if ready.ManifestID != m.ID || ready.RequestedCapabilities != "mcp.read" || ready.ManifestPermissions != extv1.PermissionKey(m.ID, "view") || ready.RequiredCoreVersion != ">=0.4.0" {
+		t.Fatalf("descriptor: %+v", ready)
+	}
+}
+
 // TestConfigService_write미선언이면거부 는 config.read 만으로 저장할 수 없음을 고정한다.
 func TestConfigService_write미선언이면거부(t *testing.T) {
 	f := newFakeCore(t)
