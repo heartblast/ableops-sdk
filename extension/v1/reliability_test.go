@@ -66,3 +66,14 @@ func TestReliabilityManifestRejectsUnsafeDeclarations(t *testing.T) {
 		})
 	}
 }
+
+func TestSecretSelectOptionsAreRejectedAndRedacted(t *testing.T) {
+	m := mustParse(t, validManifestYAML)
+	m.Config.Schema = []ConfigField{{Key: "password", Type: ConfigTypeSelect, Options: []SelectOption{{Value: "credential-bytes"}}}}
+	if m.Validate() == nil {
+		t.Fatal("credential choice declaration accepted")
+	}
+	if len(m.Sanitized().Config.Schema[0].Options) != 0 {
+		t.Fatal("credential choices exposed")
+	}
+}

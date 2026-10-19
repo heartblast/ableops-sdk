@@ -446,6 +446,9 @@ func (m Manifest) Sanitized() Manifest {
 	out.Config.Schema = make([]ConfigField, len(m.Config.Schema))
 	for i, f := range m.Config.Schema {
 		f.Options = append([]SelectOption(nil), f.Options...)
+		if isSecretKey(f.Key, f.Secret) {
+			f.Options = nil
+		}
 		if f.Default != nil && isSecretKey(f.Key, f.Secret) {
 			f.Default = maskedValue
 		}

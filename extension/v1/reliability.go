@@ -40,6 +40,9 @@ func (m Manifest) validateReliability() error {
 		if field.Type == ConfigTypeSecretRef && (field.Secret || field.Default != nil) {
 			errs = append(errs, errors.New("secretRef fields cannot contain secrets or package defaults"))
 		}
+		if len(field.Options) > 0 && isSecretKey(field.Key, field.Secret) {
+			errs = append(errs, errors.New("secret fields cannot declare select options"))
+		}
 		if len(field.Options) > 0 && field.Type != ConfigTypeSelect {
 			errs = append(errs, errors.New("config options require select type"))
 		}
