@@ -37,6 +37,8 @@ const (
 	//
 	// 구버전 Core 는 이 변수를 넣지 않는다 → 미설정은 "프로토콜 1" 로 해석한다.
 	EnvProtocolVersion = "ABLEOPS_EXT_PROTOCOL"
+	// EnvDataDir is optional and is selected exclusively by the trusted Host.
+	EnvDataDir = "ABLEOPS_EXT_DATA_DIR"
 	// EnvHostAPIVersion 은 Core 가 제공하는 Host API 버전 세그먼트다(예: "v1").
 	//
 	// 구버전 Core 는 이 변수를 넣지 않는다 → 미설정이면 SDK 는 **버전 없는 경로**를 쓴다

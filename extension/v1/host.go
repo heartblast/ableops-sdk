@@ -39,6 +39,11 @@ type Logger interface {
 // 이 구조체는 v1 이 사는 동안 필드가 **추가**될 수 있고, 그때 unkeyed composite literal
 // (HostContext{a, b, c})은 컴파일이 깨진다. keyed literal 이나 testkit 은 깨지지 않는다.
 type HostContext struct {
+	// DataDir is an optional Host-selected persistent directory outside the
+	// installed package. Empty means unavailable; Extensions must not invent a
+	// package-relative fallback. It is node-local and carries no replication promise.
+	DataDir string
+
 	// ExtensionID 는 이 컨텍스트를 받는 Extension 의 ID 다(설정·감사·로그 스코프의 기준).
 	ExtensionID string
 	// Identity 는 현재 요청 사용자를 돌려준다. 인증 컨텍스트가 없으면 ok=false.

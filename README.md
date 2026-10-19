@@ -332,3 +332,5 @@ PR 을 올리기 전에:
 ```bash
 go build ./... && go vet ./... && go test ./...
 ```
+
+Optional process reliability fields are documented in [Extension v1 reliability](docs/extension-reliability-v1.md).

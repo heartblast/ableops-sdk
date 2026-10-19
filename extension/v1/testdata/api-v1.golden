@@ -36,6 +36,7 @@
   field ConfigField.Default any `json:"default,omitempty" yaml:"default,omitempty"`
   field ConfigField.Key string `json:"key" yaml:"key"`
   field ConfigField.Label string `json:"label,omitempty" yaml:"label,omitempty"`
+  field ConfigField.Options []SelectOption `json:"options,omitempty" yaml:"options,omitempty"`
   field ConfigField.Required bool `json:"required,omitempty" yaml:"required,omitempty"`
   field ConfigField.Secret bool `json:"secret,omitempty" yaml:"secret,omitempty"`
   field ConfigField.Type string `json:"type,omitempty" yaml:"type,omitempty"`
@@ -56,6 +57,7 @@
   field HostContext.Audit AuditService
   field HostContext.Clusters ClusterRegistry
   field HostContext.Config ConfigService
+  field HostContext.DataDir string
   field HostContext.ExtensionID string
   field HostContext.Identity func(ctx context.Context) (Identity, bool)
   field HostContext.Kafka KafkaReadService
@@ -134,6 +136,7 @@
   field RequestRef.ID string `json:"requestId"`
   field RequestRef.State string `json:"state"`
   field Requires.Core string `json:"core,omitempty" yaml:"core,omitempty"`
+  field RouteDecl.Methods []string `json:"methods,omitempty" yaml:"methods,omitempty"`
   field RouteDecl.Path string `json:"path" yaml:"path"`
   field RouteDecl.Permission string `json:"permission,omitempty" yaml:"permission,omitempty"`
   field RouteHandler.Handler http.Handler
@@ -146,6 +149,8 @@
   field SecretEgressRequest.Ref string `json:"ref"`
   field SecretEgressRequest.URL string `json:"url"`
   field SecretRef.Ref string `json:"ref"`
+  field SelectOption.Label string `json:"label,omitempty" yaml:"label,omitempty"`
+  field SelectOption.Value string `json:"value" yaml:"value"`
   field TopicCreateInput.CleanupPolicy string `json:"cleanupPolicy,omitempty"`
   field TopicCreateInput.ClusterID string `json:"clusterId"`
   field TopicCreateInput.Configs map[string]string `json:"configs,omitempty"`
@@ -235,8 +240,10 @@ const CodeRateLimited ErrorCode
 const CodeTemporaryFailure ErrorCode
 const ConfigTypeBool
 const ConfigTypeInt
+const ConfigTypeSecretRef
 const ConfigTypeSelect
 const ConfigTypeString
+const EnvDataDir
 const EnvHostAPIVersion
 const EnvProtocolVersion
 const FrontendKindIsolatedFrame
@@ -330,6 +337,7 @@ method (Manifest) Sanitized() Manifest
 method (Manifest) SupportsMigrationRollback() bool
 method (Manifest) Validate() error
 method (ReadyMessage) EffectiveProtocolVersion() int
+method (RouteDecl) AllowsMethod(string) bool
 method (ServiceMap) Lookup(Capability) (any, bool)
 method (ServiceResolverFunc) Lookup(Capability) (any, bool)
 method (State) IsHealthy() bool
@@ -385,6 +393,7 @@ type SecretEgressRequest struct
 type SecretRef struct
 type SecretRefService interface
 type SecretUseService interface
+type SelectOption struct
 type ServiceMap map[Capability]any
 type ServiceResolver interface
 type ServiceResolverFunc func(capability Capability) (any, bool)
@@ -402,6 +411,7 @@ var ErrCapabilityUnavailable
   field Environment.CallToken string
   field Environment.Capabilities []extv1.Capability
   field Environment.Config map[string]any
+  field Environment.DataDir string
   field Environment.ExtensionID string
   field Environment.HostAPIVersion string
   field Environment.HostToken string
@@ -421,6 +431,7 @@ const DirectRunMessage
 const EnvCallToken
 const EnvCapabilities
 const EnvConfig
+const EnvDataDir
 const EnvExtensionID
 const EnvExtensionVersion
 const EnvHostAPIVersion

@@ -13,6 +13,13 @@ SDK 공개 API 가 바뀌지 않았다면 Core 릴리스 때문에 여기 항목
 
 ---
 
+## v1.4.0 - 2026-10-19
+
+- Add typed secret-reference configuration, select options and route methods with
+  backward-compatible omission and validation.
+- Expose the optional Host-selected persistent data directory to process Extensions.
+- Preserve protocol 1 and existing interfaces; hot reload remains deferred.
+
 ## v1.3.0 — 2026-09-28
 
 태그 미생성(릴리스 전). `extension/v1` protocol `1` · Host API `v1` 유지 — 모두 추가만 한 변경이다.

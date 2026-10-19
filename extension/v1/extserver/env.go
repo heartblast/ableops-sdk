@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 
 	extv1 "github.com/heartblast/ableops-sdk/extension/v1"
@@ -22,6 +23,7 @@ import (
 const (
 	// EnvExtensionID 는 확장 ID 다(Manifest 의 id 와 일치해야 한다).
 	EnvExtensionID = "ABLEOPS_EXT_ID"
+	EnvDataDir     = extv1.EnvDataDir
 	// EnvExtensionVersion 은 Core 에 설치된 버전이다(비면 Manifest 의 version 을 쓴다).
 	EnvExtensionVersion = "ABLEOPS_EXT_VERSION"
 	// EnvCallToken 은 Core 가 보내는 요청을 Extension 이 검증할 토큰이다.
@@ -54,6 +56,9 @@ const tokenMask = "***"
 // CallToken·HostToken 은 시크릿이다. 이 구조체를 %v/%+v 로 찍어도 새지 않도록
 // String() 이 마스킹된 요약을 돌려준다(fmt 는 String() 을 우선한다).
 type Environment struct {
+	// DataDir is never logged and is optional on older Hosts.
+	DataDir string
+
 	// ExtensionID 는 확장 ID 다.
 	ExtensionID string
 	// Version 은 실행 중인 확장 버전이다(환경변수 우선, 없으면 Manifest).
@@ -176,6 +181,7 @@ func loadEnvironment(lookup func(string) (string, bool), manifest extv1.Manifest
 	}
 
 	env := Environment{
+		DataDir:     get(EnvDataDir),
 		ExtensionID: get(EnvExtensionID),
 		Version:     get(EnvExtensionVersion),
 		CallToken:   get(EnvCallToken),
@@ -183,6 +189,9 @@ func loadEnvironment(lookup func(string) (string, bool), manifest extv1.Manifest
 		HostToken:   get(EnvHostToken),
 	}
 
+	if env.DataDir != "" && (!filepath.IsAbs(env.DataDir) || filepath.Clean(env.DataDir) != env.DataDir) {
+		return Environment{}, fmt.Errorf("invalid Host data directory")
+	}
 	// 1) 필수 값 — 하나라도 없으면 "직접 실행"으로 보고 누락 목록을 함께 알려준다.
 	var missing []string
 	for _, req := range []struct {

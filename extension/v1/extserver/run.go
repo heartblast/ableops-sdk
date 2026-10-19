@@ -470,6 +470,11 @@ func buildHandler(ext extv1.Extension, env Environment, logger extv1.Logger) (ht
 		if method == "" {
 			method = http.MethodGet
 		}
+		for _, decl := range ext.Manifest().Routes {
+			if decl.Path == "/api/extensions/"+env.ExtensionID+pattern && !decl.AllowsMethod(method) {
+				return nil, fmt.Errorf("runtime route method disagrees with manifest")
+			}
+		}
 		if rt.Handler == nil {
 			return nil, fmt.Errorf("확장 라우트 %s %s 의 핸들러가 nil 입니다", method, pattern)
 		}

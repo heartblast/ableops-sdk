@@ -655,6 +655,7 @@ func newHostContext(env Environment, log extv1.Logger, timeout time.Duration) (e
 	client := newHostClient(env, log, timeout)
 
 	host := extv1.HostContext{
+		DataDir:     env.DataDir,
 		ExtensionID: env.ExtensionID,
 		Identity:    IdentityFrom,
 		Log:         log,

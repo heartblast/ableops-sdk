@@ -11,6 +11,9 @@ package extensionv1
 // Permission 은 이 경로 접근에 필요한 권한 키이며, 비우면 인증만 요구한다.
 // `ext.` 로 시작하면 반드시 자기 Extension 네임스페이스여야 한다.
 type RouteDecl struct {
+	// Methods is optional; omission preserves legacy runtime OPTIONS discovery.
+	Methods []string `json:"methods,omitempty" yaml:"methods,omitempty"`
+
 	Path       string `json:"path" yaml:"path"`
 	Permission string `json:"permission,omitempty" yaml:"permission,omitempty"`
 }

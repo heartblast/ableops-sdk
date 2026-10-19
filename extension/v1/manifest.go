@@ -364,6 +364,7 @@ func (m Manifest) Validate() error {
 		seenCfg[f.Key] = true
 	}
 
+	errs = append(errs, m.validateReliability())
 	return errors.Join(errs...)
 }
 
@@ -431,6 +432,9 @@ func (m Manifest) Sanitized() Manifest {
 
 	out.Capabilities = append([]Capability(nil), m.Capabilities...)
 	out.Routes = append([]RouteDecl(nil), m.Routes...)
+	for i := range out.Routes {
+		out.Routes[i].Methods = append([]string(nil), m.Routes[i].Methods...)
+	}
 	out.Menus = append([]MenuDecl(nil), m.Menus...)
 
 	out.Permissions = make([]PermissionDecl, len(m.Permissions))
@@ -441,6 +445,7 @@ func (m Manifest) Sanitized() Manifest {
 
 	out.Config.Schema = make([]ConfigField, len(m.Config.Schema))
 	for i, f := range m.Config.Schema {
+		f.Options = append([]SelectOption(nil), f.Options...)
 		if f.Default != nil && isSecretKey(f.Key, f.Secret) {
 			f.Default = maskedValue
 		}

@@ -13,13 +13,24 @@ const (
 	ConfigTypeInt    = "int"
 	ConfigTypeBool   = "bool"
 	ConfigTypeSelect = "select"
+	// ConfigTypeSecretRef accepts a Host-authorized opaque reference string; never credential bytes.
+	ConfigTypeSecretRef = "secretRef"
 )
 
 // ConfigField 는 Extension 설정 항목 1개의 스키마다.
 //
 // Secret 이 true 면 값은 화면·로그·감사·API 응답에서 마스킹된다(Manifest.Sanitized 참조).
 // Default 에는 **평문 시크릿을 넣지 않는다** — Manifest 는 패키지에 그대로 담겨 배포되는 파일이다.
+// SelectOption is a closed string choice. An omitted Options list preserves the
+// v1 legacy free-string select behavior.
+type SelectOption struct {
+	Value string `json:"value" yaml:"value"`
+	Label string `json:"label,omitempty" yaml:"label,omitempty"`
+}
+
 type ConfigField struct {
+	Options []SelectOption `json:"options,omitempty" yaml:"options,omitempty"`
+
 	Key      string `json:"key" yaml:"key"`
 	Type     string `json:"type,omitempty" yaml:"type,omitempty"` // string | int | bool | select
 	Default  any    `json:"default,omitempty" yaml:"default,omitempty"`
