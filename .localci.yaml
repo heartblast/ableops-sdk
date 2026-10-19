@@ -1,0 +1,28 @@
+version: 1
+pipeline:
+  name: ableops-sdk
+sandbox:
+  mode: process
+runner:
+  concurrency: "1"
+default_profile: extension-reliability
+profiles:
+  extension-reliability:
+    steps: [extension-reliability]
+steps:
+  - name: extension-reliability
+    env:
+      PATH: /data/godev/go-1.27.1-linux/bin:/usr/local/bin:/usr/bin:/bin
+      GOMODCACHE: /data/godev/gopath/pkg/mod
+      GOCACHE: /home/nice/.cache/go-build
+      GOMAXPROCS: "2"
+      GOPROXY: "off"
+      GOSUMDB: "off"
+      GOFLAGS: "-mod=vendor -p=2"
+    commands:
+      - bash scripts/extension-reliability-ci.sh
+    resources:
+      lock: [{name: custom:ableops-sdk-reliability, scope: cluster}]
+      wait_timeout: 10m
+    artifacts: [dist/extension-reliability-ci/*.json, dist/extension-reliability-ci/*.log]
+    timeout: 15m
