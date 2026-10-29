@@ -45,12 +45,27 @@
   field ConsumerGroupInfo.State string `json:"state"`
   field ConsumerGroupInfo.TopicLag map[string]int64 `json:"topicLag,omitempty"`
   field ConsumerGroupInfo.TotalLag int64 `json:"totalLag"`
+  field EmbeddingInput.Index int `json:"index"`
+  field EmbeddingInput.Text string `json:"text"`
+  field EmbeddingModelIdentity.Dimensions int `json:"dimensions"`
+  field EmbeddingModelIdentity.ModelID string `json:"modelId"`
+  field EmbeddingModelIdentity.ModelRevision string `json:"modelRevision"`
+  field EmbeddingModelIdentity.PoolingNormalization string `json:"poolingNormalization"`
+  field EmbeddingModelIdentity.PreprocessingVersion string `json:"preprocessingVersion"`
+  field EmbeddingModelIdentity.TokenizerRevision string `json:"tokenizerRevision"`
+  field EmbeddingRequest.Inputs []EmbeddingInput `json:"inputs"`
+  field EmbeddingRequest.Model EmbeddingModelIdentity `json:"model"`
+  field EmbeddingResponse.Model EmbeddingModelIdentity `json:"model"`
+  field EmbeddingResponse.Vectors []EmbeddingVector `json:"vectors"`
+  field EmbeddingVector.Index int `json:"index"`
+  field EmbeddingVector.Values []float32 `json:"values"`
   field Error.Code ErrorCode `json:"code"`
   field Error.Message string `json:"message"`
   field Error.RequestID string `json:"requestId,omitempty"`
   field FrontendDecl.Enabled bool `json:"enabled" yaml:"enabled"`
   field FrontendDecl.Entry string `json:"entry,omitempty" yaml:"entry,omitempty"`
   field FrontendDecl.Kind string `json:"kind,omitempty" yaml:"kind,omitempty"`
+  field GetResultInfoRequest.Reference ResultReference `json:"reference"`
   field Health.CheckedAt time.Time `json:"checkedAt"`
   field Health.Message string `json:"message,omitempty"`
   field Health.OK bool `json:"ok"`
@@ -106,6 +121,7 @@
   field Manifest.ID string `json:"id" yaml:"id"`
   field Manifest.Menus []MenuDecl `json:"menus,omitempty" yaml:"menus,omitempty"`
   field Manifest.Name string `json:"name" yaml:"name"`
+  field Manifest.OptionalCapabilities []Capability `json:"optionalCapabilities,omitempty" yaml:"optionalCapabilities,omitempty"`
   field Manifest.Permissions []PermissionDecl `json:"permissions,omitempty" yaml:"permissions,omitempty"`
   field Manifest.Publisher string `json:"publisher,omitempty" yaml:"publisher,omitempty"`
   field Manifest.Requires Requires `json:"requires,omitempty" yaml:"requires,omitempty"`
@@ -124,6 +140,22 @@
   field PermissionDecl.Key string `json:"key" yaml:"key"`
   field PermissionDecl.Label string `json:"label" yaml:"label"`
   field PermissionDecl.Roles []string `json:"roles,omitempty" yaml:"roles,omitempty"`
+  field PutResultRequest.Data []byte `json:"data"`
+  field PutResultRequest.Length int64 `json:"length"`
+  field PutResultRequest.MIMEType string `json:"mimeType"`
+  field PutResultRequest.SHA256 string `json:"sha256"`
+  field PutResultRequest.Source ResultSourceIdentity `json:"source"`
+  field ReadResultPageRequest.Cursor string `json:"cursor,omitempty"`
+  field ReadResultPageRequest.Fields []string `json:"fields,omitempty"`
+  field ReadResultPageRequest.Limit int `json:"limit"`
+  field ReadResultPageRequest.Reference ResultReference `json:"reference"`
+  field ReadResultRequest.Limit int `json:"limit"`
+  field ReadResultRequest.Offset int64 `json:"offset"`
+  field ReadResultRequest.Reference ResultReference `json:"reference"`
+  field ReadResultResponse.Complete bool `json:"complete"`
+  field ReadResultResponse.Data []byte `json:"data"`
+  field ReadResultResponse.Info ResultInfo `json:"info"`
+  field ReadResultResponse.Offset int64 `json:"offset"`
   field ReadyMessage.APIVersion string `json:"apiVersion,omitempty"`
   field ReadyMessage.Addr string `json:"addr"`
   field ReadyMessage.ManifestID string `json:"manifestId,omitempty"`
@@ -136,6 +168,25 @@
   field RequestRef.ID string `json:"requestId"`
   field RequestRef.State string `json:"state"`
   field Requires.Core string `json:"core,omitempty" yaml:"core,omitempty"`
+  field ResultInfo.CreatedAt time.Time `json:"createdAt"`
+  field ResultInfo.ExpiresAt time.Time `json:"expiresAt,omitempty"`
+  field ResultInfo.Length int64 `json:"length"`
+  field ResultInfo.MIMEType string `json:"mimeType"`
+  field ResultInfo.ObservedAt time.Time `json:"observedAt"`
+  field ResultInfo.Reference ResultReference `json:"reference"`
+  field ResultInfo.SHA256 string `json:"sha256"`
+  field ResultInfo.Source ResultSourceIdentity `json:"source"`
+  field ResultInfo.Status ResultStatus `json:"status"`
+  field ResultPage.Info ResultInfo `json:"info"`
+  field ResultPage.Items []json.RawMessage `json:"items"`
+  field ResultPage.NextCursor string `json:"nextCursor,omitempty"`
+  field ResultReceipt.Info ResultInfo `json:"info"`
+  field ResultReference.Ref string `json:"ref"`
+  field ResultSourceIdentity.ExtensionID string `json:"extensionId"`
+  field ResultSourceIdentity.SchemaHash string `json:"schemaHash"`
+  field ResultSourceIdentity.ServerID string `json:"serverId"`
+  field ResultSourceIdentity.ToolName string `json:"toolName"`
+  field ResultSourceIdentity.ToolVersion string `json:"toolVersion,omitempty"`
   field RouteDecl.Methods []string `json:"methods,omitempty" yaml:"methods,omitempty"`
   field RouteDecl.Path string `json:"path" yaml:"path"`
   field RouteDecl.Permission string `json:"permission,omitempty" yaml:"permission,omitempty"`
@@ -186,6 +237,7 @@
   imethod ConfigService.ConfigReadService
   imethod ConfigService.ConfigWriteService
   imethod ConfigWriteService.Set(context.Context, map[string]any) error
+  imethod EmbeddingService.Embed(context.Context, EmbeddingRequest) (EmbeddingResponse, error)
   imethod Extension.Health(context.Context) Health
   imethod Extension.Manifest() Manifest
   imethod Extension.Routes() []RouteHandler
@@ -203,6 +255,10 @@
   imethod MCPService.ListMCPServers(context.Context) ([]MCPServer, error)
   imethod MCPService.ListMCPTools(context.Context, string) ([]MCPTool, error)
   imethod MetricsService.RecordMetric(context.Context, Metric) error
+  imethod ResultStoreService.GetResultInfo(context.Context, GetResultInfoRequest) (ResultInfo, error)
+  imethod ResultStoreService.PutResult(context.Context, PutResultRequest) (ResultReceipt, error)
+  imethod ResultStoreService.ReadResult(context.Context, ReadResultRequest) (ReadResultResponse, error)
+  imethod ResultStoreService.ReadResultPage(context.Context, ReadResultPageRequest) (ResultPage, error)
   imethod SecretRefService.Resolve(context.Context, string) (SecretRef, error)
   imethod SecretUseService.Do(context.Context, SecretRef, *http.Request) (*http.Response, error)
   imethod ServiceResolver.Lookup(Capability) (any, bool)
@@ -220,11 +276,14 @@ const CapAuditWrite Capability
 const CapClusterRead Capability
 const CapConfigRead Capability
 const CapConfigWrite Capability
+const CapEmbeddingInvoke Capability
 const CapHostMetadata Capability
 const CapKafkaRead Capability
 const CapMCPCall Capability
 const CapMCPRead Capability
 const CapMetricsWrite Capability
+const CapResultRead Capability
+const CapResultWrite Capability
 const CapSecretRef Capability
 const CapSecretUse Capability
 const CapWorkflowSubmit Capability
@@ -250,7 +309,18 @@ const FrontendKindIsolatedFrame
 const FrontendKindTrustedModule
 const HostAPIVersion
 const IncompatiblePrefix
+const MaxEmbeddingDimensions
+const MaxEmbeddingInputBytes
+const MaxEmbeddingInputs
+const MaxEmbeddingTotalInputBytes
 const MaxProtocolVersion
+const MaxResultBytes
+const MaxResultCursorBytes
+const MaxResultFieldBytes
+const MaxResultPageFields
+const MaxResultPageItems
+const MaxResultReadBytes
+const MaxResultRefBytes
 const MaxSecretEgressRequestBytes
 const MetricCounter MetricKind
 const MetricDuration MetricKind
@@ -267,6 +337,9 @@ const PhaseValidating InstallPhase
 const PhaseVerifying InstallPhase
 const ProtocolVersion
 const ReadyPrefix
+const ResultStatusAvailable ResultStatus
+const ResultStatusExpired ResultStatus
+const ResultStatusUnavailable ResultStatus
 const SDKVersion
 const StateDegraded State
 const StateDisabled State
@@ -310,6 +383,10 @@ method (*Error) Error() string
 method (*Error) Is(error) bool
 method (*Error) Unwrap() error
 method (*Error) WithRequestID(string) *Error
+method (EmbeddingModelIdentity) Validate() error
+method (EmbeddingRequest) Validate() error
+method (EmbeddingResponse) ValidateFor(EmbeddingRequest) error
+method (GetResultInfoRequest) Validate() error
 method (HostContext) HasService(Capability) bool
 method (HostContext) Logger() Logger
 method (HostContext) LookupService(Capability) (any, bool)
@@ -317,12 +394,15 @@ method (HostContext) RequireAudit() (AuditService, error)
 method (HostContext) RequireClusters() (ClusterRegistry, error)
 method (HostContext) RequireConfig() (ConfigService, error)
 method (HostContext) RequireConfigWrite() (ConfigWriteService, error)
+method (HostContext) RequireEmbedding() (EmbeddingService, error)
 method (HostContext) RequireHostMetadata() (HostMetadataService, error)
 method (HostContext) RequireIdentity(context.Context) (Identity, error)
 method (HostContext) RequireKafka() (KafkaReadService, error)
 method (HostContext) RequireMCPCall() (MCPService, error)
 method (HostContext) RequireMCPRead() (MCPService, error)
 method (HostContext) RequireMetrics() (MetricsService, error)
+method (HostContext) RequireResultRead() (ResultStoreService, error)
+method (HostContext) RequireResultWrite() (ResultStoreService, error)
 method (HostContext) RequireSecretUse() (SecretUseService, error)
 method (HostContext) RequireSecrets() (SecretRefService, error)
 method (HostContext) RequireWorkflow() (WorkflowSubmitService, error)
@@ -332,11 +412,19 @@ method (InstallPhase) IsTerminal() bool
 method (InstallPhase) Valid() bool
 method (Manifest) FrontendMode() string
 method (Manifest) HasCapability(Capability) bool
+method (Manifest) HasRequiredCapability(Capability) bool
 method (Manifest) MigrationRollbackMode() string
+method (Manifest) RequestedCapabilities() []Capability
 method (Manifest) Sanitized() Manifest
 method (Manifest) SupportsMigrationRollback() bool
 method (Manifest) Validate() error
+method (PutResultRequest) Validate() error
+method (ReadResultPageRequest) Validate() error
+method (ReadResultRequest) Validate() error
 method (ReadyMessage) EffectiveProtocolVersion() int
+method (ResultInfo) Validate() error
+method (ResultReference) Validate() error
+method (ResultSourceIdentity) Validate() error
 method (RouteDecl) AllowsMethod(string) bool
 method (ServiceMap) Lookup(Capability) (any, bool)
 method (ServiceResolverFunc) Lookup(Capability) (any, bool)
@@ -358,10 +446,17 @@ type ConfigReadService interface
 type ConfigService interface
 type ConfigWriteService interface
 type ConsumerGroupInfo struct
+type EmbeddingInput struct
+type EmbeddingModelIdentity struct
+type EmbeddingRequest struct
+type EmbeddingResponse struct
+type EmbeddingService interface
+type EmbeddingVector struct
 type Error struct
 type ErrorCode string
 type Extension interface
 type FrontendDecl struct
+type GetResultInfoRequest struct
 type Health struct
 type HostContext struct
 type HostMetadata struct
@@ -384,9 +479,20 @@ type MetricKind string
 type MetricsService interface
 type MigrationsDecl struct
 type PermissionDecl struct
+type PutResultRequest struct
+type ReadResultPageRequest struct
+type ReadResultRequest struct
+type ReadResultResponse struct
 type ReadyMessage struct
 type RequestRef struct
 type Requires struct
+type ResultInfo struct
+type ResultPage struct
+type ResultReceipt struct
+type ResultReference struct
+type ResultSourceIdentity struct
+type ResultStatus string
+type ResultStoreService interface
 type RouteDecl struct
 type RouteHandler struct
 type SecretEgressRequest struct
@@ -482,6 +588,10 @@ type ReadyMessage = extv1.ReadyMessage
 # package testkit (extension/v1/testkit)
   field FakeAudit.Entries []extv1.AuditEntry
   field FakeConfig.Writes []map[string]any
+  field FakeEmbedding.EmbedFunc func(context.Context, extv1.EmbeddingRequest) (extv1.EmbeddingResponse, error)
+  field FakeEmbedding.Err error
+  field FakeEmbedding.Requests []extv1.EmbeddingRequest
+  field FakeEmbedding.Response extv1.EmbeddingResponse
   field FakeHostMetadata.Value extv1.HostMetadata
   field FakeKafka.Calls []string
   field FakeMCP.Authorize func(context.Context) bool
@@ -492,6 +602,14 @@ type ReadyMessage = extv1.ReadyMessage
   field FakeMCP.Servers []extv1.MCPServer
   field FakeMCP.Tools map[string][]extv1.MCPTool
   field FakeMetrics.Records []extv1.Metric
+  field FakeResultStore.InfoFunc func(context.Context, extv1.GetResultInfoRequest) (extv1.ResultInfo, error)
+  field FakeResultStore.InfoRequests []extv1.GetResultInfoRequest
+  field FakeResultStore.PageFunc func(context.Context, extv1.ReadResultPageRequest) (extv1.ResultPage, error)
+  field FakeResultStore.PageRequests []extv1.ReadResultPageRequest
+  field FakeResultStore.PutFunc func(context.Context, extv1.PutResultRequest) (extv1.ResultReceipt, error)
+  field FakeResultStore.PutRequests []extv1.PutResultRequest
+  field FakeResultStore.ReadFunc func(context.Context, extv1.ReadResultRequest) (extv1.ReadResultResponse, error)
+  field FakeResultStore.ReadRequests []extv1.ReadResultRequest
   field FakeSecretUse.Bindings map[string]SecretBinding
   field FakeSecretUse.Err error
   field FakeSecretUse.Transport http.RoundTripper
@@ -502,8 +620,10 @@ type ReadyMessage = extv1.ReadyMessage
   field Host.Audit *FakeAudit
   field Host.Clusters *FakeClusters
   field Host.Config *FakeConfig
+  field Host.Embedding *FakeEmbedding
   field Host.Kafka *FakeKafka
   field Host.Log *RecordingLogger
+  field Host.Results *FakeResultStore
   field Host.SecretUse *FakeSecretUse
   field Host.Secrets *FakeSecrets
   field Host.Workflow *FakeWorkflow
@@ -539,6 +659,7 @@ func NewRecordingLogger() *RecordingLogger
 func WithAudit(*FakeAudit) Option
 func WithClusters(*FakeClusters) Option
 func WithConfig(map[string]any) Option
+func WithEmbedding(*FakeEmbedding) Option
 func WithGrantedCapabilities(...extv1.Capability) ProcessOption
 func WithHostMetadata(FakeHostMetadata) Option
 func WithIdentity(extv1.Identity) Option
@@ -549,6 +670,8 @@ func WithMCPCall(*FakeMCP) Option
 func WithMCPRead(*FakeMCP) Option
 func WithMetrics(*FakeMetrics) Option
 func WithProcessVersion(string) ProcessOption
+func WithResultRead(*FakeResultStore) Option
+func WithResultWrite(*FakeResultStore) Option
 func WithSecretUse(*FakeSecretUse) Option
 func WithSecrets(...string) Option
 func WithService(extv1.Capability, any) Option
@@ -560,6 +683,8 @@ method (*FakeClusters) Get(context.Context, string) (extv1.ClusterInfo, bool)
 method (*FakeClusters) List(context.Context) ([]extv1.ClusterInfo, error)
 method (*FakeConfig) Get(context.Context) (map[string]any, error)
 method (*FakeConfig) Set(context.Context, map[string]any) error
+method (*FakeEmbedding) Embed(context.Context, extv1.EmbeddingRequest) (extv1.EmbeddingResponse, error)
+method (*FakeEmbedding) History() []extv1.EmbeddingRequest
 method (*FakeKafka) DescribeTopic(context.Context, string, string) (extv1.TopicDetail, error)
 method (*FakeKafka) FailWith(error) *FakeKafka
 method (*FakeKafka) ListACLs(context.Context, string, extv1.ACLFilter) ([]extv1.ACLEntry, error)
@@ -574,6 +699,10 @@ method (*FakeMCP) CallMCPTool(context.Context, extv1.MCPToolCall) (extv1.MCPTool
 method (*FakeMCP) ListMCPServers(context.Context) ([]extv1.MCPServer, error)
 method (*FakeMCP) ListMCPTools(context.Context, string) ([]extv1.MCPTool, error)
 method (*FakeMetrics) RecordMetric(context.Context, extv1.Metric) error
+method (*FakeResultStore) GetResultInfo(context.Context, extv1.GetResultInfoRequest) (extv1.ResultInfo, error)
+method (*FakeResultStore) PutResult(context.Context, extv1.PutResultRequest) (extv1.ResultReceipt, error)
+method (*FakeResultStore) ReadResult(context.Context, extv1.ReadResultRequest) (extv1.ReadResultResponse, error)
+method (*FakeResultStore) ReadResultPage(context.Context, extv1.ReadResultPageRequest) (extv1.ResultPage, error)
 method (*FakeSecretUse) Bind(string, SecretBinding) *FakeSecretUse
 method (*FakeSecretUse) Do(context.Context, extv1.SecretRef, *http.Request) (*http.Response, error)
 method (*FakeSecretUse) History() []SecretUse
@@ -601,10 +730,12 @@ method (FakeHostMetadata) GetHostMetadata(context.Context) (extv1.HostMetadata, 
 type FakeAudit struct
 type FakeClusters struct
 type FakeConfig struct
+type FakeEmbedding struct
 type FakeHostMetadata struct
 type FakeKafka struct
 type FakeMCP struct
 type FakeMetrics struct
+type FakeResultStore struct
 type FakeSecretUse struct
 type FakeSecrets struct
 type FakeWorkflow struct

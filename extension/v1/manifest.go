@@ -150,20 +150,21 @@ func (m Manifest) FrontendMode() string {
 // 관리 화면·감사·로그에 노출되는 데이터이므로 비밀번호·토큰·키를 담을 자리가 존재해서는 안 된다.
 // (그럼에도 config 기본값에 실수로 들어올 수 있으므로 Sanitized 가 방어적으로 마스킹한다.)
 type Manifest struct {
-	APIVersion   string           `json:"apiVersion" yaml:"apiVersion"`
-	ID           string           `json:"id" yaml:"id"`
-	Name         string           `json:"name" yaml:"name"`
-	Version      string           `json:"version" yaml:"version"`
-	Description  string           `json:"description,omitempty" yaml:"description,omitempty"`
-	Publisher    string           `json:"publisher,omitempty" yaml:"publisher,omitempty"`
-	Requires     Requires         `json:"requires,omitempty" yaml:"requires,omitempty"`
-	Capabilities []Capability     `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
-	Permissions  []PermissionDecl `json:"permissions,omitempty" yaml:"permissions,omitempty"`
-	Backend      BackendDecl      `json:"backend,omitempty" yaml:"backend,omitempty"`
-	Frontend     FrontendDecl     `json:"frontend,omitempty" yaml:"frontend,omitempty"`
-	Routes       []RouteDecl      `json:"routes,omitempty" yaml:"routes,omitempty"`
-	Menus        []MenuDecl       `json:"menus,omitempty" yaml:"menus,omitempty"`
-	Config       ConfigDecl       `json:"config,omitempty" yaml:"config,omitempty"`
+	APIVersion           string           `json:"apiVersion" yaml:"apiVersion"`
+	ID                   string           `json:"id" yaml:"id"`
+	Name                 string           `json:"name" yaml:"name"`
+	Version              string           `json:"version" yaml:"version"`
+	Description          string           `json:"description,omitempty" yaml:"description,omitempty"`
+	Publisher            string           `json:"publisher,omitempty" yaml:"publisher,omitempty"`
+	Requires             Requires         `json:"requires,omitempty" yaml:"requires,omitempty"`
+	Capabilities         []Capability     `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
+	OptionalCapabilities []Capability     `json:"optionalCapabilities,omitempty" yaml:"optionalCapabilities,omitempty"`
+	Permissions          []PermissionDecl `json:"permissions,omitempty" yaml:"permissions,omitempty"`
+	Backend              BackendDecl      `json:"backend,omitempty" yaml:"backend,omitempty"`
+	Frontend             FrontendDecl     `json:"frontend,omitempty" yaml:"frontend,omitempty"`
+	Routes               []RouteDecl      `json:"routes,omitempty" yaml:"routes,omitempty"`
+	Menus                []MenuDecl       `json:"menus,omitempty" yaml:"menus,omitempty"`
+	Config               ConfigDecl       `json:"config,omitempty" yaml:"config,omitempty"`
 }
 
 // ParseManifest 는 extension.yaml 바이트열을 Manifest 로 파싱한다.
@@ -199,6 +200,9 @@ func (m *Manifest) normalize() {
 
 	for i, c := range m.Capabilities {
 		m.Capabilities[i] = Capability(strings.TrimSpace(string(c)))
+	}
+	for i, c := range m.OptionalCapabilities {
+		m.OptionalCapabilities[i] = Capability(strings.TrimSpace(string(c)))
 	}
 	for i := range m.Permissions {
 		m.Permissions[i].Key = strings.TrimSpace(m.Permissions[i].Key)
@@ -258,6 +262,23 @@ func (m Manifest) Validate() error {
 	}
 
 	// 5) capability
+	seenCaps := make(map[Capability]bool, len(m.Capabilities)+len(m.OptionalCapabilities))
+	for _, c := range m.Capabilities {
+		if seenCaps[c] {
+			errs = append(errs, fmt.Errorf("duplicate required capability: %q", string(c)))
+		}
+		seenCaps[c] = true
+	}
+	// Unknown optional capabilities are accepted for forward compatibility.
+	for _, c := range m.OptionalCapabilities {
+		if strings.TrimSpace(string(c)) == "" {
+			errs = append(errs, errors.New("optionalCapabilities contains an empty capability"))
+		}
+		if seenCaps[c] {
+			errs = append(errs, fmt.Errorf("capability is duplicated across required/optional: %q", string(c)))
+		}
+		seenCaps[c] = true
+	}
 	for _, c := range m.Capabilities {
 		if !KnownCapability(c) {
 			errs = append(errs, fmt.Errorf("알 수 없는 capability 입니다: %q", string(c)))
@@ -431,6 +452,7 @@ func (m Manifest) Sanitized() Manifest {
 	out := m
 
 	out.Capabilities = append([]Capability(nil), m.Capabilities...)
+	out.OptionalCapabilities = append([]Capability(nil), m.OptionalCapabilities...)
 	out.Routes = append([]RouteDecl(nil), m.Routes...)
 	for i := range out.Routes {
 		out.Routes[i].Methods = append([]string(nil), m.Routes[i].Methods...)

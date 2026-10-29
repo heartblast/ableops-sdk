@@ -27,11 +27,12 @@ func New() *Extension { return &Extension{} }
 // Manifest 는 확장 선언을 돌려준다.
 func (e *Extension) Manifest() extv1.Manifest {
 	return extv1.Manifest{
-		APIVersion:   extv1.APIVersion,
-		ID:           "consumer-demo",
-		Name:         "외부 Consumer 데모",
-		Version:      "1.0.0",
-		Capabilities: []extv1.Capability{extv1.CapKafkaRead, extv1.CapConfigRead, extv1.CapConfigWrite},
+		APIVersion:           extv1.APIVersion,
+		ID:                   "consumer-demo",
+		Name:                 "외부 Consumer 데모",
+		Version:              "1.0.0",
+		Capabilities:         []extv1.Capability{extv1.CapKafkaRead, extv1.CapConfigRead, extv1.CapConfigWrite},
+		OptionalCapabilities: []extv1.Capability{extv1.CapEmbeddingInvoke, extv1.CapResultWrite, extv1.CapResultRead},
 		Permissions: []extv1.PermissionDecl{
 			{Key: extv1.PermissionKey("consumer-demo", "view"), Label: "조회", Roles: []string{"SystemAdmin"}},
 		},
@@ -76,6 +77,9 @@ func (e *Extension) ping(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), extv1.HTTPStatusForCode(extv1.CodeOf(err)))
 		return
 	}
+	_, _ = e.host.RequireEmbedding()
+	_, _ = e.host.RequireResultWrite()
+	_, _ = e.host.RequireResultRead()
 	if id := extserver.RequestIDFrom(r.Context()); id != "" {
 		w.Header().Set("X-Demo-Request-Id", id)
 	}

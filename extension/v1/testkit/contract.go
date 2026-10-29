@@ -65,7 +65,7 @@ func CheckManifest(m extv1.Manifest) []string {
 	}
 	// capability 는 Manifest 가 요구한 최소권한이다 — 모르는 이름은 Validate 가 잡지만,
 	// 여기서 "선언했는데 라우트가 하나도 없는" 과다 선언도 알려 준다(최소권한 점검).
-	if len(m.Capabilities) > 0 && !m.Backend.Enabled {
+	if len(m.RequestedCapabilities()) > 0 && !m.Backend.Enabled {
 		issues = append(issues, "backend.enabled=false 인데 capability 를 선언했습니다 — 백엔드가 없으면 Host 서비스를 쓸 수 없습니다")
 	}
 	return issues
@@ -134,7 +134,7 @@ func CheckLifecycle(ext extv1.Extension, host extv1.HostContext) []string {
 	}
 
 	after := ext.Manifest()
-	if before.ID != after.ID || before.Version != after.Version || len(before.Capabilities) != len(after.Capabilities) {
+	if before.ID != after.ID || before.Version != after.Version || len(before.Capabilities) != len(after.Capabilities) || len(before.OptionalCapabilities) != len(after.OptionalCapabilities) {
 		issues = append(issues, "Manifest 가 호출마다 달라집니다 — 런타임에 선언을 바꾸면 Core 의 검증을 우회하게 됩니다")
 	}
 

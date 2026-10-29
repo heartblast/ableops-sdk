@@ -119,7 +119,10 @@ var processCapabilityClients = map[extv1.Capability]bool{
 	extv1.CapHostMetadata:   true,
 	extv1.CapSecretUse:      true,
 	// secret.ref 는 외부 프로세스 Host 프로토콜에 경로가 없다(hostclient.go 참조).
-	extv1.CapSecretRef: false,
+	extv1.CapSecretRef:       false,
+	extv1.CapEmbeddingInvoke: true,
+	extv1.CapResultWrite:     true,
+	extv1.CapResultRead:      true,
 }
 
 // String 은 마스킹된 요약을 돌려준다(토큰 유출 방지).

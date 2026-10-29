@@ -361,8 +361,9 @@ func checkLoopback(addr net.Addr) error {
 // 프로토콜 1의 원래 필드(addr·version)는 그대로 채우고 apiVersion·protocolVersion 을 **추가**한다.
 // 구버전 Core 는 모르는 필드를 무시하므로 하위호환이 유지된다.
 func writeHandshake(w io.Writer, addr string, env Environment, manifest extv1.Manifest) error {
-	requested := make([]string, 0, len(manifest.Capabilities))
-	for _, c := range manifest.Capabilities {
+	requestedCaps := manifest.RequestedCapabilities()
+	requested := make([]string, 0, len(requestedCaps))
+	for _, c := range requestedCaps {
 		requested = append(requested, string(c))
 	}
 	permissions := make([]string, 0, len(manifest.Permissions))
