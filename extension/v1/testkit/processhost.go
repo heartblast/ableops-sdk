@@ -405,6 +405,10 @@ func (p *ProcessHost) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case strings.HasPrefix(r.URL.Path, "/v1/mcp/"):
 		p.serveMCP(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == "/v1/embedding/embed":
+		p.serveEmbedding(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/results/"):
+		p.serveResults(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/secrets/egress":
 		p.serveEgress(w, r)
 	default:
@@ -494,6 +498,101 @@ func (p *ProcessHost) serveMCP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (p *ProcessHost) serveEmbedding(w http.ResponseWriter, r *http.Request) {
+	svc, err := p.host.ctx.RequireEmbedding()
+	if err != nil || !p.grantedCap(extv1.CapEmbeddingInvoke) {
+		p.deny(w, "capability:"+string(extv1.CapEmbeddingInvoke))
+		return
+	}
+	ctx, done, ok := p.principal(r)
+	if !ok {
+		p.deny(w, "principal")
+		return
+	}
+	defer done()
+	var request extv1.EmbeddingRequest
+	if json.NewDecoder(io.LimitReader(r.Body, extv1.MaxEmbeddingTotalInputBytes*2)).Decode(&request) != nil {
+		writeHostError(w, extv1.NewError(extv1.CodeInvalidArgument, "invalid embedding request"))
+		return
+	}
+	response, err := svc.Embed(ctx, request)
+	if err != nil {
+		writeHostError(w, err)
+		return
+	}
+	writeHostJSON(w, response)
+}
+
+func (p *ProcessHost) serveResults(w http.ResponseWriter, r *http.Request) {
+	need := extv1.CapResultRead
+	if r.URL.Path == "/v1/results/put" {
+		need = extv1.CapResultWrite
+	}
+	svc, err := extv1.RequireService[extv1.ResultStoreService](p.host.ctx, need)
+	if err != nil || !p.grantedCap(need) {
+		p.deny(w, "capability:"+string(need))
+		return
+	}
+	ctx, done, ok := p.principal(r)
+	if !ok {
+		p.deny(w, "principal")
+		return
+	}
+	defer done()
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 2*extv1.MaxResultBytes))
+	switch r.URL.Path {
+	case "/v1/results/put":
+		var request extv1.PutResultRequest
+		if decoder.Decode(&request) != nil {
+			writeHostError(w, extv1.NewError(extv1.CodeInvalidArgument, "invalid result put request"))
+			return
+		}
+		response, err := svc.PutResult(ctx, request)
+		if err != nil {
+			writeHostError(w, err)
+			return
+		}
+		writeHostJSON(w, response)
+	case "/v1/results/read":
+		var request extv1.ReadResultRequest
+		if decoder.Decode(&request) != nil {
+			writeHostError(w, extv1.NewError(extv1.CodeInvalidArgument, "invalid result read request"))
+			return
+		}
+		response, err := svc.ReadResult(ctx, request)
+		if err != nil {
+			writeHostError(w, err)
+			return
+		}
+		writeHostJSON(w, response)
+	case "/v1/results/page":
+		var request extv1.ReadResultPageRequest
+		if decoder.Decode(&request) != nil {
+			writeHostError(w, extv1.NewError(extv1.CodeInvalidArgument, "invalid result page request"))
+			return
+		}
+		response, err := svc.ReadResultPage(ctx, request)
+		if err != nil {
+			writeHostError(w, err)
+			return
+		}
+		writeHostJSON(w, response)
+	case "/v1/results/info":
+		var request extv1.GetResultInfoRequest
+		if decoder.Decode(&request) != nil {
+			writeHostError(w, extv1.NewError(extv1.CodeInvalidArgument, "invalid result info request"))
+			return
+		}
+		response, err := svc.GetResultInfo(ctx, request)
+		if err != nil {
+			writeHostError(w, err)
+			return
+		}
+		writeHostJSON(w, response)
+	default:
+		writeHostError(w, extv1.NewError(extv1.CodeNotFound, "no such Host API path"))
+	}
+}
 func (p *ProcessHost) serveEgress(w http.ResponseWriter, r *http.Request) {
 	svc, err := p.host.ctx.RequireSecretUse()
 	if err != nil || !p.grantedCap(extv1.CapSecretUse) {

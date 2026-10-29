@@ -31,7 +31,11 @@ type Host struct {
 	// extra 는 WithService 로 추가된 임의 capability 서비스다.
 	extra []serviceEntry
 	// mcpCall 은 WithMCPCall 로 준 FakeMCP 다. mcp.call 을 허용한 Host 는 조회도 같은 서비스로 한다.
-	mcpCall *FakeMCP
+	mcpCall     *FakeMCP
+	Embedding   *FakeEmbedding
+	Results     *FakeResultStore
+	resultWrite bool
+	resultRead  bool
 }
 
 // Context 는 확장의 Start 에 넘길 HostContext 를 돌려준다.
@@ -88,6 +92,20 @@ func (h *Host) buildResolver() extv1.ServiceResolver {
 		}
 	}
 	// 마지막에 적용해 명시적 주입이 기본 조립을 이기게 한다.
+	if h.Embedding != nil {
+		services[extv1.CapEmbeddingInvoke] = extv1.EmbeddingService(h.Embedding)
+	}
+	if h.Results != nil {
+		switch {
+		case h.resultWrite && h.resultRead:
+			services[extv1.CapResultWrite] = extv1.ResultStoreService(h.Results)
+			services[extv1.CapResultRead] = extv1.ResultStoreService(h.Results)
+		case h.resultWrite:
+			services[extv1.CapResultWrite] = extv1.ResultStoreService(resultWriteOnly{h.Results})
+		case h.resultRead:
+			services[extv1.CapResultRead] = extv1.ResultStoreService(resultReadOnly{h.Results})
+		}
+	}
 	for _, e := range h.extra {
 		services[e.capability] = e.svc
 	}

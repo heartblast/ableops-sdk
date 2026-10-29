@@ -61,6 +61,14 @@ const (
 	// 허용: 참조 문자열 해석·유효성 확인.
 	// 불허: 평문 시크릿 값 획득. 어떤 메서드도 평문을 반환하지 않는다.
 	CapSecretRef Capability = "secret.ref"
+
+	// CapEmbeddingInvoke allows host-managed embedding inference. The extension
+	// supplies text and immutable model identity metadata, never an endpoint or credential.
+	CapEmbeddingInvoke Capability = "embedding.invoke"
+	// CapResultWrite allows creating an opaque, host-scoped result object.
+	CapResultWrite Capability = "result.write"
+	// CapResultRead allows reading bounded data from an opaque result reference.
+	CapResultRead Capability = "result.read"
 )
 
 // AllCapabilities 는 v1 이 정의하는 capability 전체를 선언 순서대로 돌려준다.
@@ -78,6 +86,9 @@ func AllCapabilities() []Capability {
 		CapMetricsWrite,
 		CapHostMetadata,
 		CapSecretUse,
+		CapEmbeddingInvoke,
+		CapResultWrite,
+		CapResultRead,
 	}
 }
 
@@ -87,7 +98,8 @@ func AllCapabilities() []Capability {
 func KnownCapability(c Capability) bool {
 	switch c {
 	case CapKafkaRead, CapClusterRead, CapWorkflowSubmit, CapAuditWrite, CapConfigRead, CapConfigWrite, CapSecretRef,
-		CapMCPRead, CapMCPCall, CapMetricsWrite, CapHostMetadata, CapSecretUse:
+		CapMCPRead, CapMCPCall, CapMetricsWrite, CapHostMetadata, CapSecretUse,
+		CapEmbeddingInvoke, CapResultWrite, CapResultRead:
 		return true
 	}
 	return false
@@ -102,10 +114,35 @@ const (
 
 // HasCapability 는 Manifest 가 해당 capability 를 선언했는지 확인한다.
 func (m Manifest) HasCapability(c Capability) bool {
+	for _, x := range m.RequestedCapabilities() {
+		if x == c {
+			return true
+		}
+	}
+	return false
+}
+
+// HasRequiredCapability reports whether a capability is required.
+func (m Manifest) HasRequiredCapability(c Capability) bool {
 	for _, x := range m.Capabilities {
 		if x == c {
 			return true
 		}
 	}
 	return false
+}
+
+// RequestedCapabilities returns the stable de-duplicated required/optional union.
+func (m Manifest) RequestedCapabilities() []Capability {
+	out := make([]Capability, 0, len(m.Capabilities)+len(m.OptionalCapabilities))
+	seen := make(map[Capability]bool, cap(out))
+	for _, group := range [][]Capability{m.Capabilities, m.OptionalCapabilities} {
+		for _, c := range group {
+			if !seen[c] {
+				seen[c] = true
+				out = append(out, c)
+			}
+		}
+	}
+	return out
 }

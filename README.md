@@ -1,5 +1,32 @@
 # AbleOps SDK
 
+## v1.5 semantic Host services
+
+Declare optional semantic services when an extension can safely fall back on an older Host:
+
+```go
+OptionalCapabilities: []extensionv1.Capability{
+    extensionv1.CapEmbeddingInvoke,
+    extensionv1.CapResultWrite,
+    extensionv1.CapResultRead,
+}
+```
+
+`HostContext.RequireEmbedding`, `RequireResultWrite`, and `RequireResultRead` resolve services
+through `ServiceResolver`; no `HostContext` field or existing interface changed. The process
+client uses fixed Host API v1 endpoints (`/embedding/embed` and `/results/{put,read,page,info}`)
+and requires a live Host-proxied request context.
+
+Embedding requests carry bounded indexed text plus exact model, tokenizer, dimension, pooling,
+normalization and preprocessing identity. They never carry an endpoint or credential. Result
+requests carry opaque references and bounded content/page selectors. The Host derives user,
+tenant, session, execution, storage location and lifecycle; extensions cannot provide those
+fields or request a TTL.
+
+Keep truly mandatory services in `Capabilities`. Missing required grants remain diagnostic and
+installation-policy failures. Optional grants participate in negotiation only; absence means
+`CAPABILITY_UNAVAILABLE`, so the extension can retain its lexical or inline-result fallback.
+
 ## v1.2 Host services
 
 `extension/v1` adds `mcp.read`, `mcp.call`, `metrics.write`, and

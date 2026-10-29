@@ -5,8 +5,8 @@ package extensionv1
 import "testing"
 
 func TestKnownCapability(t *testing.T) {
-	if len(AllCapabilities()) != 12 {
-		t.Fatalf("capability 는 12종이어야 한다: %d종", len(AllCapabilities()))
+	if len(AllCapabilities()) != 15 {
+		t.Fatalf("capability count must be 15: %d", len(AllCapabilities()))
 	}
 	for _, c := range AllCapabilities() {
 		if !KnownCapability(c) {
@@ -23,17 +23,20 @@ func TestKnownCapability(t *testing.T) {
 
 func TestCapability_상수값(t *testing.T) {
 	want := map[Capability]string{
-		CapKafkaRead:      "kafka.read",
-		CapClusterRead:    "cluster.read",
-		CapWorkflowSubmit: "workflow.submit",
-		CapAuditWrite:     "audit.write",
-		CapConfigRead:     "config.read",
-		CapConfigWrite:    "config.write",
-		CapSecretRef:      "secret.ref",
-		CapMCPRead:        "mcp.read",
-		CapMCPCall:        "mcp.call",
-		CapMetricsWrite:   "metrics.write",
-		CapHostMetadata:   "host.metadata",
+		CapKafkaRead:       "kafka.read",
+		CapClusterRead:     "cluster.read",
+		CapWorkflowSubmit:  "workflow.submit",
+		CapAuditWrite:      "audit.write",
+		CapConfigRead:      "config.read",
+		CapConfigWrite:     "config.write",
+		CapSecretRef:       "secret.ref",
+		CapMCPRead:         "mcp.read",
+		CapMCPCall:         "mcp.call",
+		CapMetricsWrite:    "metrics.write",
+		CapHostMetadata:    "host.metadata",
+		CapEmbeddingInvoke: "embedding.invoke",
+		CapResultWrite:     "result.write",
+		CapResultRead:      "result.read",
 	}
 	for c, s := range want {
 		if string(c) != s {

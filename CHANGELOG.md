@@ -13,6 +13,19 @@ SDK 공개 API 가 바뀌지 않았다면 Core 릴리스 때문에 여기 항목
 
 ---
 
+## v1.5.0 - 2026-10-29
+
+- Add optional Manifest capability negotiation. `capabilities` remains required;
+  `optionalCapabilities` joins the request/grant union but never installation refusal or
+  `MissingCapabilities`. Unknown optional names safely receive no service on older Hosts.
+- Add the request-scoped, Host-managed `embedding.invoke` contract with exact model identity,
+  bounded inputs, dimension/index/order, finite-value, zero-vector and normalization validation.
+- Add `result.write` and `result.read` through `ResultStoreService`, using opaque references,
+  exact length/SHA-256/MIME/source identity and bounded byte/page/field reads. Scope, bucket/key,
+  endpoint, credential and requested TTL are deliberately absent from extension requests.
+- Add fixed Host API v1 process clients, capability-isolated testkit fakes/ProcessHost routes,
+  external consumer compile coverage, and additive public API golden entries.
+
 ## v1.4.0 - 2026-10-19
 
 - Add typed secret-reference configuration, select options and route methods with

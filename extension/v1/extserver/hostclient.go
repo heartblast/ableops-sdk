@@ -723,6 +723,20 @@ func newHostContext(env Environment, log extv1.Logger, timeout time.Duration) (e
 	if env.HasCapability(extv1.CapHostMetadata) {
 		services[extv1.CapHostMetadata] = extv1.HostMetadataService(metadataService{c: client})
 	}
+	if env.HasCapability(extv1.CapEmbeddingInvoke) {
+		services[extv1.CapEmbeddingInvoke] = extv1.EmbeddingService(embeddingService{c: client})
+	}
+	canWriteResult := env.HasCapability(extv1.CapResultWrite)
+	canReadResult := env.HasCapability(extv1.CapResultRead)
+	if canWriteResult || canReadResult {
+		svc := &resultStoreService{c: client, canWrite: canWriteResult, canRead: canReadResult}
+		if canWriteResult {
+			services[extv1.CapResultWrite] = extv1.ResultStoreService(svc)
+		}
+		if canReadResult {
+			services[extv1.CapResultRead] = extv1.ResultStoreService(svc)
+		}
+	}
 	host.Services = services
 	return host, client
 }
